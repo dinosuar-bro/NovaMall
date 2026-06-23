@@ -1,0 +1,20 @@
+:root {
+  color-scheme: light;
+  --color-bg: oklch(1 0 0);
+  --color-surface: oklch(0.982 0.004 35.8);
+  --color-surface-strong: oklch(0.955 0.008 35.8);
+  --color-ink: oklch(0.225 0.026 35.8);
+  --color-muted: oklch(0.405 0.026 35.8);
+  --color-border: oklch(0.88 0.012 35.8);
+  --color-primary: oklch(0.55 0.18 35.8);
+  --color-primary-hover: oklch(0.50 0.19 35.8);
+  --color-primary-weak: oklch(0.955 0.032 35.8);
+  --color-success: oklch(0.52 0.12 155);
+  --color-danger: oklch(0.55 0.18 25);
+  --focus-ring: 0 0 0 3px oklch(0.78 0.11 35.8 / 0.55);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow-pop: 0 8px 18px oklch(0.22 0.03 35.8 / 0.12);
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+}

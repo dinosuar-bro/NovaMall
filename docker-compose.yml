@@ -1,0 +1,77 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: novamall
+      MYSQL_USER: novamall
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-novamall_dev_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-novamall_root_dev_password}
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-novamall_root_dev_password}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql://novamall:${MYSQL_PASSWORD:-novamall_dev_password}@mysql:3306/novamall
+    command: ["pnpm", "db:migrate"]
+
+  seed-demo:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    profiles:
+      - tools
+    depends_on:
+      mysql:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: mysql://novamall:${MYSQL_PASSWORD:-novamall_dev_password}@mysql:3306/novamall
+      PHONE_AES_KEY: ${PHONE_AES_KEY:-phone-key-with-at-least-32-characters}
+    command: ["pnpm", "db:seed:demo"]
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      API_PORT: 3000
+      DATABASE_URL: mysql://novamall:${MYSQL_PASSWORD:-novamall_dev_password}@mysql:3306/novamall
+      SESSION_SECRET: ${SESSION_SECRET:-session-secret-with-at-least-32-characters}
+      PHONE_AES_KEY: ${PHONE_AES_KEY:-phone-key-with-at-least-32-characters}
+      WEB_ORIGIN: http://localhost:8080
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/v1/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+
+volumes:
+  mysql-data:

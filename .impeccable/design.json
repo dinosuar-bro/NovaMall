@@ -1,0 +1,25 @@
+{
+  "name": "NovaMall（星选）",
+  "register": "product",
+  "colors": {
+    "background": "oklch(1 0 0)",
+    "surface": "oklch(0.982 0.004 35.8)",
+    "ink": "oklch(0.225 0.026 35.8)",
+    "muted": "oklch(0.405 0.026 35.8)",
+    "primary": "oklch(0.55 0.18 35.8)",
+    "primaryHover": "oklch(0.50 0.19 35.8)",
+    "focusRing": "oklch(0.78 0.11 35.8 / 0.55)"
+  },
+  "radii": {
+    "sm": "8px",
+    "md": "12px",
+    "lg": "16px"
+  },
+  "motion": {
+    "durationMs": [180, 220],
+    "ease": "power3.out",
+    "properties": ["transform", "autoAlpha"],
+    "reducedMotion": "instant-or-near-instant"
+  },
+  "components": ["Button", "Field", "StatusMessage", "BrandMark", "AuthShell", "RolePage"]
+}
