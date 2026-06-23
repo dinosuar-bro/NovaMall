@@ -50,10 +50,13 @@
 
 | 方法 | 路径 | 角色 | 说明 |
 |---|---|---|---|
+| GET | `/auth/csrf` | 公开 | 建立匿名 Session 并返回 CSRF Token |
 | POST | `/auth/register` | 公开 | 注册会员 |
 | POST | `/auth/login` | 公开 | 登录并轮换 Session ID |
 | POST | `/auth/logout` | 已登录 | 销毁 Session |
 | GET | `/auth/session` | 已登录 | 当前用户、角色和 CSRF Token |
+
+阶段 1 还提供健康检查与角色壳验证接口：`GET /health/live`、`GET /health/ready`、`GET /member/overview`、`GET /owner/overview`、`GET /admin/overview`。
 
 注册请求包含 `username`、`password`、`displayName`、`phone`。登录错误不区分“用户不存在”和“密码错误”。
 
@@ -201,9 +204,13 @@
 | 错误码 | HTTP | 含义 |
 |---|---:|---|
 | VALIDATION_ERROR | 400 | 参数不合法 |
+| CSRF_INVALID | 403 | CSRF Token 缺失或错误 |
+| INVALID_CREDENTIALS | 401 | 用户名或密码错误 |
 | AUTH_REQUIRED | 401 | 未登录 |
 | ACCOUNT_DISABLED | 401 | 账号禁用 |
 | FORBIDDEN | 403 | 角色不足 |
+| USERNAME_TAKEN | 409 | 用户名已被使用 |
+| SERVICE_NOT_READY | 503 | 服务依赖未就绪 |
 | RESOURCE_NOT_OWNED | 403 | 资源不属于当前用户/店铺 |
 | NOT_FOUND | 404 | 资源不存在 |
 | EMPTY_CART | 409 | 购物车为空 |

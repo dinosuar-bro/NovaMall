@@ -2,7 +2,7 @@
 
 NovaMall 是一个面向《数据库课程设计》的多商户网上购物系统。项目以数据库设计和可验证的高级数据库技术为核心，采用 React、Express 与 MySQL 构建。
 
-> 当前状态：设计与文档阶段。业务代码尚未开始实现。
+> 当前状态：阶段 1 基础设施与认证闭环开发中，已具备 pnpm workspace、MySQL 迁移、Express 认证 API、React 认证页与三角色应用壳。
 
 ## 项目目标
 
@@ -75,7 +75,55 @@ Route → Controller → Service → Repository → MySQL
 
 ## 运行说明
 
-Docker Compose、环境变量和启动命令将在基础设施阶段实现后补充。当前仓库尚无可运行应用。
+### 本地验证
+
+```bash
+pnpm install
+docker compose -f docker-compose.test.yml up -d mysql-test
+TEST_DATABASE_URL='mysql://novamall:novamall_test_password@127.0.0.1:3308/novamall_test' pnpm db:test:migrate
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm --filter @novamall/api test:integration
+pnpm build
+```
+
+测试 MySQL 使用宿主机 `3308` 端口，避免占用本机默认 `3306`。
+
+### 开发启动
+
+复制 `.env.example` 为 `.env` 并替换 Secret 后：
+
+```bash
+pnpm dev
+```
+
+前端开发服务通过 Vite proxy 转发 `/api` 到 `http://localhost:3000`。
+
+### Docker 启动
+
+```bash
+docker compose config
+docker compose up --build
+```
+
+生产 Compose 不向宿主机公开 MySQL，只公开前端 `http://localhost:8080`，Nginx 将 `/api` 代理到后端。
+
+准备阶段 1 演示店主与管理员账号：
+
+```bash
+docker compose run --rm seed-demo
+```
+
+演示账号为 `demo_owner`、`demo_admin`，密码均为 `StrongPass123!`。该脚本仅用于课程演示和 E2E，不属于数据库结构迁移。
+
+### 一键启动
+
+```bash
+pnpm start:all
+```
+
+该命令会通过 `scripts/start.sh` 校验 Docker Compose 配置，构建并后台启动 MySQL、数据库迁移、后端与前端。启动完成后访问 `http://localhost:8080`。
 
 ## 许可证
 

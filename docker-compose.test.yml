@@ -1,0 +1,19 @@
+services:
+  mysql-test:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: novamall_test
+      MYSQL_USER: novamall
+      MYSQL_PASSWORD: novamall_test_password
+      MYSQL_ROOT_PASSWORD: novamall_root_test_password
+      TZ: Asia/Shanghai
+    ports:
+      - "3308:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pnovamall_root_test_password"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 10s

@@ -1,0 +1,41 @@
+{
+  "name": "novamall",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.6.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "db:migrate": "dbmate --migrations-dir database/migrations --no-dump-schema up",
+    "db:rollback": "dbmate --migrations-dir database/migrations --no-dump-schema rollback",
+    "db:status": "dbmate --migrations-dir database/migrations --no-dump-schema status",
+    "db:test:migrate": "dbmate --env TEST_DATABASE_URL --migrations-dir database/migrations --no-dump-schema up",
+    "db:test:rollback": "dbmate --env TEST_DATABASE_URL --migrations-dir database/migrations --no-dump-schema rollback",
+    "db:seed:demo": "tsx database/seeds/create-demo-users.ts",
+    "dev": "pnpm --parallel --filter @novamall/api --filter @novamall/web dev",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit && pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:integration": "pnpm --filter @novamall/api test:integration",
+    "test:e2e": "playwright test",
+    "build": "pnpm -r build",
+    "start:all": "bash scripts/start.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.0",
+    "@types/node": "^26.0.0",
+    "@vitejs/plugin-react": "^6.0.2",
+    "dbmate": "^2.33.0",
+    "eslint": "^10.5.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "jsdom": "^29.1.1",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.1",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.9"
+  }
+}
