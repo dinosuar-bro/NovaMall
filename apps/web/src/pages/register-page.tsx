@@ -46,10 +46,7 @@ export function RegisterPage() {
       }, csrfToken);
       void navigate("/member");
     } catch (error) {
-      setMessage(error instanceof ApiClientError
-        ? `${error.message}${error.requestId !== undefined ? `（请求 ${error.requestId}）` : ""}`
-        : "注册失败，请稍后重试。"
-      );
+      setMessage(registerErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -68,6 +65,18 @@ export function RegisterPage() {
       </form>
     </AuthShell>
   );
+}
+
+function registerErrorMessage(error: unknown): string {
+  if (error instanceof ApiClientError) {
+    if (error.code === "USERNAME_TAKEN") {
+      return "用户名已被占用，请换一个再试。";
+    }
+    if (error.code === "VALIDATION_ERROR") {
+      return "请检查用户名、手机号和密码格式。";
+    }
+  }
+  return "注册失败，请稍后重试。";
 }
 
 function formValue(formData: FormData, name: string): string {

@@ -39,6 +39,9 @@ function readCsrf(body: unknown): string {
 
 describe("认证 API", () => {
   beforeEach(async () => {
+    await pool.query("DELETE FROM audit_logs");
+    await pool.query("DELETE FROM shops");
+    await pool.query("DELETE FROM merchant_applications");
     await pool.query("DELETE FROM sessions");
     await pool.query("DELETE FROM user_roles");
     await pool.query("DELETE FROM users");

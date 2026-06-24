@@ -102,13 +102,13 @@
 
 ## 8. 阶段质量门禁
 
-### 阶段 1 当前验收命令
+### 当前阶段验收命令
 
 ```bash
 pnpm lint
 pnpm typecheck
 pnpm test
-pnpm --filter @novamall/api test:integration
+pnpm test:integration
 pnpm test:e2e
 pnpm build
 docker compose config
@@ -122,7 +122,7 @@ docker compose -f docker-compose.test.yml up -d mysql-test
 TEST_DATABASE_URL='mysql://novamall:novamall_test_password@127.0.0.1:3308/novamall_test' pnpm db:test:migrate
 ```
 
-阶段 1 当前自动化覆盖：共享合同、API 单元、API 集成、Web 组件与 Playwright 浏览器 E2E。E2E 会通过 `seed-demo` 服务准备 `demo_owner` 和 `demo_admin` 演示账号。
+阶段 2 当前自动化覆盖：共享合同、API 单元、商户入驻 API/数据库集成、Web 角色页与路由守卫、Playwright 浏览器 E2E。E2E 会通过 `seed-demo` 服务准备 `demo_owner` 和 `demo_admin` 演示账号，并覆盖会员提交开店申请、管理员批准、会员进入店主后台的最小链路。
 
 每阶段结束必须满足：
 

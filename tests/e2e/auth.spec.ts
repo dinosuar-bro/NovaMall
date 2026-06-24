@@ -40,6 +40,38 @@ test("演示管理员登录后进入 ADMIN 壳", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "管理员后台壳已就绪" })).toBeVisible();
 });
 
+test("会员提交开店申请后，管理员批准并进入店主后台", async ({ page }) => {
+  const suffix = Date.now().toString();
+  const username = `e2e_merchant_${suffix}`;
+  const shopName = `星选测试铺${suffix.slice(-5)}`;
+
+  await page.goto("/register");
+  await page.getByLabel("用户名").fill(username);
+  await page.getByLabel("展示名").fill("E2E 商户会员");
+  await page.getByLabel("手机号").fill(`138${suffix.slice(-8).padStart(8, "0")}`);
+  await page.getByLabel("密码").fill(demoPassword);
+  await page.getByRole("button", { name: "注册并进入会员首页" }).click();
+
+  await expect(page.getByRole("heading", { name: "开店申请" })).toBeVisible();
+  await page.getByLabel("店铺名称").fill(shopName);
+  await page.getByLabel("店铺简介").fill("主营社区精选商品和测试礼盒");
+  await page.getByRole("button", { name: "提交开店申请" }).click();
+  await expect(page.locator(".status-badge").filter({ hasText: "等待管理员审核" })).toBeVisible();
+
+  await page.context().clearCookies();
+  await login(page, "demo_admin");
+  await expect(page.getByRole("heading", { name: "开店审核" })).toBeVisible();
+  const applicationRow = page.locator(".application-row").filter({ hasText: shopName });
+  await expect(applicationRow).toBeVisible();
+  await applicationRow.getByRole("button", { name: "批准" }).click();
+  await expect(applicationRow.getByText("等待管理员审核")).toHaveCount(0);
+
+  await page.context().clearCookies();
+  await login(page, username);
+  await expect(page.getByRole("heading", { name: "店铺资料" })).toBeVisible();
+  await expect(page.getByText(shopName)).toBeVisible();
+});
+
 async function login(page: Page, username: string): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("用户名").fill(username);

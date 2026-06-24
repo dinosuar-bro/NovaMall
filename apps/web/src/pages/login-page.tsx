@@ -44,10 +44,7 @@ export function LoginPage() {
       }, csrfToken);
       void navigate(defaultRoute(session.user.roles));
     } catch (error) {
-      setMessage(error instanceof ApiClientError
-        ? `${error.message}${error.requestId !== undefined ? `（请求 ${error.requestId}）` : ""}`
-        : "登录失败，请稍后重试。"
-      );
+      setMessage(loginErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -74,6 +71,21 @@ function defaultRoute(roles: string[]): string {
     return "/owner";
   }
   return "/member";
+}
+
+function loginErrorMessage(error: unknown): string {
+  if (error instanceof ApiClientError) {
+    if (error.code === "INVALID_CREDENTIALS" || error.code === "AUTH_REQUIRED") {
+      return "用户名或密码不正确。";
+    }
+    if (error.code === "VALIDATION_ERROR") {
+      return "请输入正确的用户名和密码。";
+    }
+    if (error.code === "ACCOUNT_DISABLED") {
+      return "账号暂时不可用，请联系平台管理员。";
+    }
+  }
+  return "登录失败，请稍后重试。";
 }
 
 function formValue(formData: FormData, name: string): string {

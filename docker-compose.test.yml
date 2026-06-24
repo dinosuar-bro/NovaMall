@@ -1,6 +1,7 @@
 services:
   mysql-test:
     image: mysql:8.4
+    command: ["--log-bin-trust-function-creators=1"]
     environment:
       MYSQL_DATABASE: novamall_test
       MYSQL_USER: novamall

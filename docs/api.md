@@ -217,6 +217,8 @@
 | OUT_OF_STOCK | 409 | 库存不足 |
 | PRODUCT_UNAVAILABLE | 409 | 商品或店铺不可用 |
 | DUPLICATE_APPLICATION | 409 | 申请状态冲突 |
+| APPLICATION_STATE_CONFLICT | 409 | 当前申请状态不允许操作 |
+| SHOP_NAME_TAKEN | 409 | 店铺名已被使用 |
 | ORDER_STATE_CONFLICT | 409 | 订单状态不允许操作 |
 | REFUND_STATE_CONFLICT | 409 | 退款状态不允许操作 |
 | INTERNAL_ERROR | 500 | 未知服务错误 |
