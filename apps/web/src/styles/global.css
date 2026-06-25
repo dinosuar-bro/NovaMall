@@ -336,6 +336,71 @@ textarea:focus-visible {
   min-width: 280px;
 }
 
+.catalog-toolbar,
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.field--wide {
+  grid-column: span 2;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.product-card,
+.compact-row {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.product-card {
+  overflow: hidden;
+}
+
+.product-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--color-primary-weak);
+}
+
+.product-card div {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.product-card p {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.product-card b {
+  color: var(--color-primary);
+}
+
+.compact-list {
+  display: grid;
+  gap: 10px;
+}
+
+.compact-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.3fr) minmax(120px, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+}
+
 @media (max-width: 760px) {
   .auth-shell,
   .app-frame {
@@ -365,6 +430,16 @@ textarea:focus-visible {
   .reject-reason-field {
     max-width: none;
     min-width: 0;
+  }
+
+  .catalog-toolbar,
+  .form-grid,
+  .compact-row {
+    grid-template-columns: 1fr;
+  }
+
+  .field--wide {
+    grid-column: auto;
   }
 }
 

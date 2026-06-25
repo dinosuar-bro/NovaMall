@@ -216,6 +216,11 @@
 | EMPTY_CART | 409 | 购物车为空 |
 | OUT_OF_STOCK | 409 | 库存不足 |
 | PRODUCT_UNAVAILABLE | 409 | 商品或店铺不可用 |
+| CATEGORY_NAME_TAKEN | 409 | 分类名已被使用 |
+| PRODUCT_STATE_CONFLICT | 409 | 当前商品状态不允许此操作 |
+| PRODUCT_VERSION_CONFLICT | 409 | 商品版本已变化，需要刷新后重试 |
+| INVALID_IMAGE_FILE | 400 | 上传文件不是允许的图片 |
+| IMAGE_TOO_LARGE | 400 | 上传图片超过大小限制 |
 | DUPLICATE_APPLICATION | 409 | 申请状态冲突 |
 | APPLICATION_STATE_CONFLICT | 409 | 当前申请状态不允许操作 |
 | SHOP_NAME_TAKEN | 409 | 店铺名已被使用 |

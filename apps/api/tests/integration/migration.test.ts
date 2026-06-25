@@ -20,6 +20,11 @@ interface ConstraintRow extends RowDataPacket {
   CONSTRAINT_NAME: string;
 }
 
+interface IndexRow extends RowDataPacket {
+  INDEX_NAME: string;
+  INDEX_TYPE: string;
+}
+
 describe("阶段 1 数据库迁移", () => {
   let pool: Pool;
 
@@ -32,9 +37,27 @@ describe("阶段 1 数据库迁移", () => {
       `SELECT TABLE_NAME
          FROM information_schema.TABLES
         WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME IN ('users', 'user_roles', 'merchant_applications', 'shops', 'audit_logs')`
+          AND TABLE_NAME IN (
+            'users',
+            'user_roles',
+            'merchant_applications',
+            'shops',
+            'audit_logs',
+            'categories',
+            'products',
+            'product_price_history'
+          )`
     );
     const tableNames = new Set(tables.map((row) => row.TABLE_NAME));
+    if (tableNames.has("product_price_history")) {
+      await pool.query("DELETE FROM product_price_history");
+    }
+    if (tableNames.has("products")) {
+      await pool.query("DELETE FROM products");
+    }
+    if (tableNames.has("categories")) {
+      await pool.query("DELETE FROM categories");
+    }
     if (tableNames.has("audit_logs")) {
       await pool.query("DELETE FROM audit_logs");
     }
@@ -72,6 +95,9 @@ describe("阶段 1 数据库迁移", () => {
       "merchant_applications",
       "shops",
       "audit_logs",
+      "categories",
+      "products",
+      "product_price_history",
       "schema_migrations"
     ]));
   });
@@ -102,6 +128,71 @@ describe("阶段 1 数据库迁移", () => {
       "uq_shops_name",
       "uq_shops_owner_user"
     ]));
+  });
+
+  it("创建商品目录索引和触发器", async () => {
+    const [indexRows] = await pool.query<IndexRow[]>(
+      `SELECT INDEX_NAME, INDEX_TYPE
+         FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'products'`
+    );
+    const indexNames = indexRows.map((row) => row.INDEX_NAME);
+
+    expect(indexNames).toEqual(expect.arrayContaining([
+      "idx_products_category_status_id",
+      "idx_products_shop_status_updated",
+      "idx_products_status_updated",
+      "ft_products_name_description"
+    ]));
+    expect(indexRows.some((row) => row.INDEX_NAME === "ft_products_name_description" && row.INDEX_TYPE === "FULLTEXT"))
+      .toBe(true);
+
+    const [triggerRows] = await pool.query<TriggerRow[]>(
+      `SELECT TRIGGER_NAME
+         FROM information_schema.TRIGGERS
+        WHERE TRIGGER_SCHEMA = DATABASE()
+          AND TRIGGER_NAME IN ('trg_products_price_history', 'trg_products_audit')
+        ORDER BY TRIGGER_NAME`
+    );
+
+    expect(triggerRows.map((row) => row.TRIGGER_NAME)).toEqual([
+      "trg_products_audit",
+      "trg_products_price_history"
+    ]);
+  });
+
+  it("拒绝非法分类状态、商品状态和非正价格", async () => {
+    await expect(pool.execute(
+      "INSERT INTO categories (name, description, status) VALUES (?, ?, ?)",
+      ["非法分类", "用于验证约束", "UNKNOWN"]
+    )).rejects.toMatchObject({ code: "ER_CHECK_CONSTRAINT_VIOLATED" });
+
+    const [userResult] = await pool.execute<mysql.ResultSetHeader>(
+      `INSERT INTO users (username, password_hash, display_name, phone_cipher, phone_iv)
+       VALUES (?, ?, ?, ?, ?)`,
+      ["catalog_owner", "hash", "目录店主", Buffer.from("cipher"), Buffer.alloc(16)]
+    );
+    const [shopResult] = await pool.execute<mysql.ResultSetHeader>(
+      "INSERT INTO shops (owner_user_id, name, description) VALUES (?, ?, ?)",
+      [userResult.insertId, "目录测试店", "用于验证商品约束"]
+    );
+    const [categoryResult] = await pool.execute<mysql.ResultSetHeader>(
+      "INSERT INTO categories (name, description) VALUES (?, ?)",
+      ["测试分类", "用于验证商品约束"]
+    );
+
+    await expect(pool.execute(
+      `INSERT INTO products (shop_id, category_id, name, description, price, stock, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [shopResult.insertId, categoryResult.insertId, "非法商品", "用于验证商品约束", "1.00", 1, "UNKNOWN"]
+    )).rejects.toMatchObject({ code: "ER_CHECK_CONSTRAINT_VIOLATED" });
+
+    await expect(pool.execute(
+      `INSERT INTO products (shop_id, category_id, name, description, price, stock)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [shopResult.insertId, categoryResult.insertId, "零价商品", "用于验证价格约束", "0.00", 1]
+    )).rejects.toMatchObject({ code: "ER_CHECK_CONSTRAINT_VIOLATED" });
   });
 
   it("写入三种固定角色", async () => {

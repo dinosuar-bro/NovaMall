@@ -7,6 +7,8 @@ import {
   fetchCsrf,
   getCurrentSession,
   getMyMerchantApplication,
+  listPublicCategories,
+  listPublicProducts,
   login,
   register
 } from "../api/client.js";
@@ -23,6 +25,14 @@ vi.mock("../api/client.js", () => ({
   getCurrentSession: vi.fn(),
   getMyMerchantApplication: vi.fn(),
   getOwnerShop: vi.fn(),
+  listAdminCategories: vi.fn(),
+  listOwnerProducts: vi.fn(),
+  listPublicCategories: vi.fn(),
+  listPublicProducts: vi.fn(),
+  createCategory: vi.fn(),
+  createOwnerProduct: vi.fn(),
+  publishOwnerProduct: vi.fn(),
+  uploadProductImage: vi.fn(),
   listMerchantApplications: vi.fn(),
   submitMerchantApplication: vi.fn(),
   approveMerchantApplication: vi.fn(),
@@ -34,6 +44,8 @@ vi.mock("../api/client.js", () => ({
 const mockedFetchCsrf = vi.mocked(fetchCsrf);
 const mockedGetCurrentSession = vi.mocked(getCurrentSession);
 const mockedGetMyMerchantApplication = vi.mocked(getMyMerchantApplication);
+const mockedListPublicCategories = vi.mocked(listPublicCategories);
+const mockedListPublicProducts = vi.mocked(listPublicProducts);
 const mockedLogin = vi.mocked(login);
 const mockedRegister = vi.mocked(register);
 
@@ -42,6 +54,8 @@ describe("App 路由守卫", () => {
     vi.clearAllMocks();
     mockedFetchCsrf.mockResolvedValue("csrf-token");
     mockedGetMyMerchantApplication.mockResolvedValue(null);
+    mockedListPublicCategories.mockResolvedValue([]);
+    mockedListPublicProducts.mockResolvedValue({ data: [], meta: { page: 1, pageSize: 20, total: 0 } });
   });
 
   afterEach(() => {

@@ -122,7 +122,7 @@ docker compose -f docker-compose.test.yml up -d mysql-test
 TEST_DATABASE_URL='mysql://novamall:novamall_test_password@127.0.0.1:3308/novamall_test' pnpm db:test:migrate
 ```
 
-阶段 2 当前自动化覆盖：共享合同、API 单元、商户入驻 API/数据库集成、Web 角色页与路由守卫、Playwright 浏览器 E2E。E2E 会通过 `seed-demo` 服务准备 `demo_owner` 和 `demo_admin` 演示账号，并覆盖会员提交开店申请、管理员批准、会员进入店主后台的最小链路。
+阶段 3 当前自动化覆盖：共享合同、API 单元、商户入驻与商品目录 API/数据库集成、Web 角色页与路由守卫、Playwright 浏览器 E2E。E2E 会通过 `seed-demo` 服务准备 `demo_owner` 和 `demo_admin` 演示账号，并覆盖会员提交开店申请、管理员批准、会员进入店主后台，以及管理员创建分类、店主发布带图商品、会员按关键词搜索商品的最小链路。
 
 每阶段结束必须满足：
 

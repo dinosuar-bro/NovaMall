@@ -5,6 +5,8 @@ import { errorHandler } from "./errors/error-handler.js";
 import { requestContext } from "./middleware/request-context.js";
 import { createAuthRouter } from "./modules/auth/auth.routes.js";
 import type { AuthRepository } from "./modules/auth/auth.repository.js";
+import { createCatalogRouter } from "./modules/catalog/catalog.routes.js";
+import type { CatalogRepository } from "./modules/catalog/catalog.repository.js";
 import { createHealthRouter } from "./modules/health/health.routes.js";
 import type { HealthRepository } from "./modules/health/health.repository.js";
 import { createMerchantApplicationsRouter } from "./modules/merchant-applications/merchant-applications.routes.js";
@@ -16,6 +18,7 @@ export interface AppDependencies {
   healthRepository: HealthRepository;
   authRepository?: AuthRepository;
   merchantApplicationsRepository?: MerchantApplicationsRepository;
+  catalogRepository?: CatalogRepository;
   sessionStore?: MysqlSessionStore;
   sessionSecret?: string;
 }
@@ -53,7 +56,14 @@ export function createApp(dependencies: AppDependencies): Express {
         )
       );
     }
+    if (dependencies.catalogRepository !== undefined) {
+      app.use(
+        "/api/v1",
+        createCatalogRouter(dependencies.authRepository, dependencies.catalogRepository)
+      );
+    }
   }
+  app.use("/uploads", express.static("uploads"));
   app.use("/api/v1/health", createHealthRouter(dependencies.healthRepository));
   app.use(errorHandler);
 

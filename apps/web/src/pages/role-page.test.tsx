@@ -7,9 +7,16 @@ import {
   fetchCsrf,
   getMyMerchantApplication,
   getOwnerShop,
+  listAdminCategories,
+  listOwnerProducts,
+  listPublicCategories,
+  listPublicProducts,
   listMerchantApplications,
+  createCategory,
+  createOwnerProduct,
   rejectMerchantApplication,
-  submitMerchantApplication
+  submitMerchantApplication,
+  uploadProductImage
 } from "../api/client.js";
 import { RolePage } from "./role-page.js";
 
@@ -23,8 +30,16 @@ vi.mock("../api/client.js", () => ({
   fetchCsrf: vi.fn(),
   getMyMerchantApplication: vi.fn(),
   getOwnerShop: vi.fn(),
+  listAdminCategories: vi.fn(),
+  listOwnerProducts: vi.fn(),
+  listPublicCategories: vi.fn(),
+  listPublicProducts: vi.fn(),
   listMerchantApplications: vi.fn(),
+  createCategory: vi.fn(),
+  createOwnerProduct: vi.fn(),
+  publishOwnerProduct: vi.fn(),
   submitMerchantApplication: vi.fn(),
+  uploadProductImage: vi.fn(),
   approveMerchantApplication: vi.fn(),
   rejectMerchantApplication: vi.fn()
 }));
@@ -32,7 +47,14 @@ vi.mock("../api/client.js", () => ({
 const mockedFetchCsrf = vi.mocked(fetchCsrf);
 const mockedGetMyMerchantApplication = vi.mocked(getMyMerchantApplication);
 const mockedGetOwnerShop = vi.mocked(getOwnerShop);
+const mockedListAdminCategories = vi.mocked(listAdminCategories);
+const mockedListOwnerProducts = vi.mocked(listOwnerProducts);
+const mockedListPublicCategories = vi.mocked(listPublicCategories);
+const mockedListPublicProducts = vi.mocked(listPublicProducts);
 const mockedListMerchantApplications = vi.mocked(listMerchantApplications);
+const mockedCreateCategory = vi.mocked(createCategory);
+const mockedCreateOwnerProduct = vi.mocked(createOwnerProduct);
+const mockedUploadProductImage = vi.mocked(uploadProductImage);
 const mockedSubmitMerchantApplication = vi.mocked(submitMerchantApplication);
 const mockedRejectMerchantApplication = vi.mocked(rejectMerchantApplication);
 
@@ -40,6 +62,11 @@ describe("RolePage 商户入驻区块", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedFetchCsrf.mockResolvedValue("csrf-token");
+    mockedListPublicCategories.mockResolvedValue([]);
+    mockedListPublicProducts.mockResolvedValue({ data: [], meta: { page: 1, pageSize: 20, total: 0 } });
+    mockedListAdminCategories.mockResolvedValue({ data: [], meta: { page: 1, pageSize: 20, total: 0 } });
+    mockedListOwnerProducts.mockResolvedValue({ data: [], meta: { page: 1, pageSize: 20, total: 0 } });
+    mockedUploadProductImage.mockResolvedValue("/uploads/products/2026/06/test.png");
   });
 
   afterEach(() => {
@@ -309,6 +336,117 @@ describe("RolePage 商户入驻区块", () => {
     expect(await screen.findByRole("heading", { name: "店铺资料" })).toBeInTheDocument();
     expect(screen.getByText("星选烘焙铺")).toBeInTheDocument();
     expect(screen.getByText("主营社区烘焙和礼盒")).toBeInTheDocument();
+  });
+
+  it("会员页面显示商品搜索和公开商品卡片", async () => {
+    mockedGetMyMerchantApplication.mockResolvedValue(null);
+    mockedListPublicCategories.mockResolvedValue([{
+      id: "1",
+      name: "新鲜水果",
+      description: "当季水果",
+      status: "ACTIVE",
+      createdAt: "2026-06-24T01:00:00.000Z",
+      updatedAt: "2026-06-24T01:00:00.000Z"
+    }]);
+    mockedListPublicProducts.mockResolvedValue({
+      data: [{
+        id: "10",
+        name: "高山苹果",
+        description: "现摘现发，适合家庭分享",
+        price: "19.90",
+        stock: 20,
+        mainImagePath: "/uploads/products/2026/06/apple.png",
+        category: { id: "1", name: "新鲜水果" },
+        shop: { id: "3", name: "水果公开店" },
+        createdAt: "2026-06-24T01:00:00.000Z",
+        updatedAt: "2026-06-24T01:00:00.000Z"
+      }],
+      meta: { page: 1, pageSize: 20, total: 1 }
+    });
+
+    renderRole("MEMBER");
+
+    expect(await screen.findByRole("heading", { name: "商品目录" })).toBeInTheDocument();
+    expect(screen.getByLabelText("商品关键词")).toBeInTheDocument();
+    expect(screen.getByText("高山苹果")).toBeInTheDocument();
+    expect(screen.getByText("水果公开店")).toBeInTheDocument();
+    expect(screen.getByText("¥19.90")).toBeInTheDocument();
+  });
+
+  it("管理员页面可创建分类", async () => {
+    mockedListMerchantApplications.mockResolvedValue({ data: [], meta: { page: 1, pageSize: 20, total: 0 } });
+    mockedCreateCategory.mockResolvedValue({
+      id: "1",
+      name: "新鲜水果",
+      description: "当季水果",
+      status: "ACTIVE",
+      createdAt: "2026-06-24T01:00:00.000Z",
+      updatedAt: "2026-06-24T01:00:00.000Z"
+    });
+
+    renderRole("ADMIN");
+    expect(await screen.findByRole("heading", { name: "分类管理" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("分类名称"), { target: { value: "新鲜水果" } });
+    fireEvent.change(screen.getByLabelText("分类简介"), { target: { value: "当季水果与社区精选" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建分类" }));
+
+    await waitFor(() => {
+      expect(mockedCreateCategory).toHaveBeenCalledWith({
+        name: "新鲜水果",
+        description: "当季水果与社区精选"
+      }, "csrf-token");
+    });
+  });
+
+  it("店主页面可创建草稿商品", async () => {
+    mockedGetOwnerShop.mockResolvedValue({
+      id: "3",
+      name: "星选烘焙铺",
+      description: "主营社区烘焙和礼盒",
+      status: "ACTIVE"
+    });
+    mockedListPublicCategories.mockResolvedValue([{
+      id: "1",
+      name: "新鲜水果",
+      description: "当季水果",
+      status: "ACTIVE",
+      createdAt: "2026-06-24T01:00:00.000Z",
+      updatedAt: "2026-06-24T01:00:00.000Z"
+    }]);
+    mockedCreateOwnerProduct.mockResolvedValue({
+      id: "10",
+      shopId: "3",
+      categoryId: "1",
+      categoryName: "新鲜水果",
+      name: "高山苹果",
+      description: "现摘现发，适合家庭分享",
+      price: "19.90",
+      stock: 20,
+      mainImagePath: null,
+      status: "DRAFT",
+      version: 1,
+      createdAt: "2026-06-24T01:00:00.000Z",
+      updatedAt: "2026-06-24T01:00:00.000Z"
+    });
+
+    renderRole("OWNER");
+    expect(await screen.findByRole("heading", { name: "商品管理" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("商品名称"), { target: { value: "高山苹果" } });
+    fireEvent.change(screen.getByLabelText("商品简介"), { target: { value: "现摘现发，适合家庭分享" } });
+    fireEvent.change(screen.getByLabelText("商品价格"), { target: { value: "19.90" } });
+    fireEvent.change(screen.getByLabelText("商品库存"), { target: { value: "20" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建草稿商品" }));
+
+    await waitFor(() => {
+      expect(mockedCreateOwnerProduct).toHaveBeenCalledWith({
+        categoryId: "1",
+        name: "高山苹果",
+        description: "现摘现发，适合家庭分享",
+        price: "19.90",
+        stock: 20,
+        mainImagePath: null
+      }, "csrf-token");
+    });
   });
 });
 

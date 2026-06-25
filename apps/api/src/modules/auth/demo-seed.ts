@@ -78,4 +78,16 @@ async function upsertDemoAccount(pool: Pool, phoneAesKey: string, account: DemoA
      SELECT ?, id FROM roles WHERE code IN (${placeholders})`,
     [userId, ...account.roles]
   );
+
+  if (account.username === "demo_owner") {
+    await pool.execute<ResultSetHeader>(
+      `INSERT INTO shops (owner_user_id, name, description, status)
+       VALUES (?, ?, ?, 'ACTIVE')
+       ON DUPLICATE KEY UPDATE
+         name = VALUES(name),
+         description = VALUES(description),
+         status = 'ACTIVE'`,
+      [userId, "演示店铺", "用于商品目录和订单流程演示的默认店铺"]
+    );
+  }
 }

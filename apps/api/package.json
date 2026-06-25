@@ -15,6 +15,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.19.0",
+    "@types/formidable": "^3.5.1",
     "@types/supertest": "^7.2.0",
     "supertest": "^7.2.2"
   },
@@ -22,6 +23,7 @@
     "@novamall/shared": "workspace:*",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
+    "formidable": "^3.5.4",
     "mysql2": "^3.22.5",
     "zod": "^4.4.3"
   }

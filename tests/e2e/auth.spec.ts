@@ -72,11 +72,83 @@ test("会员提交开店申请后，管理员批准并进入店主后台", async
   await expect(page.getByText(shopName)).toBeVisible();
 });
 
+test("管理员创建分类，店主发布带图商品，会员可搜索查看", async ({ page }) => {
+  const suffix = Date.now().toString();
+  const categoryName = `新鲜水果${suffix.slice(-5)}`;
+  const productName = `高山苹果${suffix.slice(-5)}`;
+
+  await login(page, "demo_admin");
+  await expect(page.getByRole("heading", { name: "分类管理" })).toBeVisible();
+  await page.getByLabel("分类名称").fill(categoryName);
+  await page.getByLabel("分类简介").fill("当季水果与社区精选");
+  await expect(page.getByRole("button", { name: "创建分类" })).toBeEnabled();
+  const categoryResponsePromise = page.waitForResponse((response) => (
+    response.url().includes("/api/v1/admin/categories") && response.request().method() === "POST"
+  ));
+  await page.getByRole("button", { name: "创建分类" }).click();
+  const categoryResponse = await categoryResponsePromise;
+  expect(categoryResponse.status()).toBe(200);
+  await expect(page.locator(".compact-row").filter({ hasText: categoryName })).toBeVisible();
+
+  await page.context().clearCookies();
+  await login(page, "demo_owner");
+  await expect(page.getByRole("heading", { name: "商品管理" })).toBeVisible();
+  await page.getByLabel("商品分类").selectOption({ label: categoryName });
+  await page.getByLabel("商品名称").fill(productName);
+  await page.getByLabel("商品简介").fill("现摘现发，适合家庭分享");
+  await page.getByLabel("商品价格").fill("19.90");
+  await page.getByLabel("商品库存").fill("20");
+  await expect(page.getByLabel("商品价格")).toHaveValue("19.90");
+  await expect(page.getByLabel("商品库存")).toHaveValue("20");
+  await page.getByLabel("商品图片").setInputFiles({
+    name: "apple.png",
+    mimeType: "image/png",
+    buffer: tinyPng()
+  });
+  await expect(page.getByRole("button", { name: "创建草稿商品" })).toBeEnabled();
+  const uploadResponsePromise = page.waitForResponse((response) => (
+    response.url().includes("/api/v1/uploads/products") && response.request().method() === "POST"
+  ));
+  const productResponsePromise = page.waitForResponse((response) => (
+    response.url().includes("/api/v1/owner/products") && response.request().method() === "POST"
+  ));
+  await page.getByRole("button", { name: "创建草稿商品" }).click();
+  expect((await uploadResponsePromise).status()).toBe(200);
+  expect((await productResponsePromise).status()).toBe(200);
+  const productRow = page.locator(".compact-row").filter({ hasText: productName });
+  await expect(productRow).toBeVisible();
+  await productRow.getByRole("button", { name: "上架" }).click();
+  await expect(productRow.getByText("已上架")).toBeVisible();
+
+  await page.context().clearCookies();
+  const username = `e2e_catalog_${suffix}`;
+  await page.goto("/register");
+  await page.getByLabel("用户名").fill(username);
+  await page.getByLabel("展示名").fill("E2E 商品会员");
+  await page.getByLabel("手机号").fill(`137${suffix.slice(-8).padStart(8, "0")}`);
+  await page.getByLabel("密码").fill(demoPassword);
+  await page.getByRole("button", { name: "注册并进入会员首页" }).click();
+
+  await expect(page.getByRole("heading", { name: "商品目录" })).toBeVisible();
+  await page.getByLabel("商品关键词").fill("苹果");
+  await page.getByRole("button", { name: "搜索商品" }).click();
+  const publicProductCard = page.locator(".product-card").filter({ hasText: productName });
+  await expect(publicProductCard).toBeVisible();
+  await expect(publicProductCard.getByText("¥19.90")).toBeVisible();
+});
+
 async function login(page: Page, username: string): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("用户名").fill(username);
   await page.getByLabel("密码").fill(demoPassword);
   await page.getByRole("button", { name: "登录" }).click();
+}
+
+function tinyPng(): Buffer {
+  return Buffer.from(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000100ffff03000006000557bfab6d0000000049454e44ae426082",
+    "hex"
+  );
 }
 
 async function expectProtectedRequest(page: Page, path: string, expectedStatus: number): Promise<void> {

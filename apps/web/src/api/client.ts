@@ -1,21 +1,36 @@
 import {
   adminMerchantApplicationSchema,
   authSessionDataSchema,
+  categoryInputSchema,
+  categorySchema,
   loginInputSchema,
   merchantApplicationInputSchema,
   merchantApplicationRejectInputSchema,
   merchantApplicationSchema,
+  ownerProductInputSchema,
+  ownerProductSchema,
+  paginatedCategoriesSchema,
   paginatedMerchantApplicationsSchema,
+  paginatedOwnerProductsSchema,
+  publicProductListSchema,
+  publicProductSchema,
   registerInputSchema,
   shopSummarySchema,
   successResponseSchema,
   type AdminMerchantApplication,
   type AuthSessionData,
+  type Category,
+  type CategoryInput,
   type LoginInput,
   type MerchantApplication,
   type MerchantApplicationInput,
   type MerchantApplicationRejectInput,
+  type OwnerProduct,
+  type OwnerProductInput,
+  type PaginatedCategories,
   type PaginatedMerchantApplications,
+  type PaginatedOwnerProducts,
+  type PublicProductList,
   type RegisterInput,
   type ShopSummary
 } from "@novamall/shared";
@@ -111,6 +126,78 @@ export async function rejectMerchantApplication(
 export async function getOwnerShop(): Promise<ShopSummary> {
   const response = await request("/owner/shop", { method: "GET" });
   return successResponseSchema(shopSummarySchema).parse(response).data;
+}
+
+export async function listPublicCategories(): Promise<Category[]> {
+  const response = await request("/categories", { method: "GET" });
+  return successResponseSchema(z.array(categorySchema)).parse(response).data;
+}
+
+export async function listPublicProducts(params: {
+  keyword?: string;
+  categoryId?: string;
+  sort?: string;
+} = {}): Promise<PublicProductList> {
+  const searchParams = new URLSearchParams();
+  if (params.keyword !== undefined && params.keyword.trim().length > 0) {
+    searchParams.set("keyword", params.keyword.trim());
+  }
+  if (params.categoryId !== undefined && params.categoryId.length > 0) {
+    searchParams.set("categoryId", params.categoryId);
+  }
+  if (params.sort !== undefined) {
+    searchParams.set("sort", params.sort);
+  }
+  const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : "";
+  const response = await request(`/products${suffix}`, { method: "GET" });
+  const parsed = successResponseSchema(z.array(publicProductSchema))
+    .extend({ meta: publicProductListSchema.shape.meta })
+    .parse(response);
+  return { data: parsed.data, meta: parsed.meta };
+}
+
+export async function listAdminCategories(): Promise<PaginatedCategories> {
+  const response = await request("/admin/categories", { method: "GET" });
+  const parsed = successResponseSchema(z.array(categorySchema))
+    .extend({ meta: paginatedCategoriesSchema.shape.meta })
+    .parse(response);
+  return { data: parsed.data, meta: parsed.meta };
+}
+
+export async function createCategory(input: CategoryInput, csrfToken: string): Promise<Category> {
+  const response = await writeJson("/admin/categories", "POST", categoryInputSchema.parse(input), csrfToken);
+  return successResponseSchema(categorySchema).parse(response).data;
+}
+
+export async function listOwnerProducts(): Promise<PaginatedOwnerProducts> {
+  const response = await request("/owner/products", { method: "GET" });
+  const parsed = successResponseSchema(z.array(ownerProductSchema))
+    .extend({ meta: paginatedOwnerProductsSchema.shape.meta })
+    .parse(response);
+  return { data: parsed.data, meta: parsed.meta };
+}
+
+export async function createOwnerProduct(input: OwnerProductInput, csrfToken: string): Promise<OwnerProduct> {
+  const response = await writeJson("/owner/products", "POST", ownerProductInputSchema.parse(input), csrfToken);
+  return successResponseSchema(ownerProductSchema).parse(response).data;
+}
+
+export async function publishOwnerProduct(productId: string, csrfToken: string): Promise<OwnerProduct> {
+  const response = await writeJson(`/owner/products/${productId}/publish`, "POST", {}, csrfToken);
+  return successResponseSchema(ownerProductSchema).parse(response).data;
+}
+
+export async function uploadProductImage(file: File, csrfToken: string): Promise<string> {
+  const formData = new FormData();
+  formData.set("image", file);
+  const response = await request("/uploads/products", {
+    method: "POST",
+    headers: {
+      "X-CSRF-Token": csrfToken
+    },
+    body: formData
+  });
+  return successResponseSchema(z.object({ path: z.string() })).parse(response).data.path;
 }
 
 async function writeAuth(path: string, body: RegisterInput | LoginInput, csrfToken: string): Promise<AuthSessionData> {

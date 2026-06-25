@@ -9,7 +9,7 @@ export class AuthController {
 
   csrf: RequestHandler = async (request, response, next) => {
     try {
-      const csrfToken = generateCsrfToken();
+      const csrfToken = request.session.csrfToken ?? generateCsrfToken();
       request.session.csrfToken = csrfToken;
       await saveSession(request);
       response.json({ success: true, data: { csrfToken } });
