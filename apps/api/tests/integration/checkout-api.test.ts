@@ -43,6 +43,14 @@ interface ProductStockRow extends RowDataPacket {
   stock: number;
 }
 
+interface OrderStatusRow extends RowDataPacket {
+  status: string;
+}
+
+interface ShopOrderNoRow extends RowDataPacket {
+  shop_order_no: string;
+}
+
 interface CipherRow extends RowDataPacket {
   receiver_phone_cipher: Buffer;
   receiver_phone_iv: Buffer;
@@ -329,6 +337,111 @@ describe("结算与数据库核心 API", () => {
     expect(stockRows[0]?.stock).toBe(5);
     await adminSession.agent.get("/api/v1/admin/audit-logs").expect(200).expect((response) => {
       expect(readData(response.body)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ tableName: "master_orders", action: "STATUS_CHANGE" })
+      ]));
+    });
+  });
+
+  it("店主可发货本店子订单，会员可确认收货并完成总订单", async () => {
+    const admin = await createUser("fulfillment_admin", ["ADMIN"]);
+    const member = await createUser("fulfillment_member");
+    const ownerA = await createOwner("fulfillment_owner_a", "履约苹果店");
+    const ownerB = await createOwner("fulfillment_owner_b", "履约梨子店");
+    const otherOwner = await createOwner("fulfillment_other_owner", "无关店铺");
+    const categoryId = await createCategory("履约分类");
+    const productA = await createPublishedProduct({ shopId: ownerA.shopId, categoryId, name: "履约苹果", price: "12.00", stock: 10 });
+    const productB = await createPublishedProduct({ shopId: ownerB.shopId, categoryId, name: "履约雪梨", price: "15.00", stock: 10 });
+    const memberSession = await loginAgent(member.username);
+    const ownerASession = await loginAgent(ownerA.username);
+    const ownerBSession = await loginAgent(ownerB.username);
+    const otherOwnerSession = await loginAgent(otherOwner.username);
+    const adminSession = await loginAgent(admin.username);
+    const addressId = await createAddress(memberSession.agent, memberSession.csrfToken);
+
+    await addCartItem(memberSession.agent, memberSession.csrfToken, productA, 1);
+    await addCartItem(memberSession.agent, memberSession.csrfToken, productB, 1);
+    const orderNo = readStringPath((await memberSession.agent
+      .post("/api/v1/member/checkout")
+      .set("X-CSRF-Token", memberSession.csrfToken)
+      .send({ addressId, checkoutToken: "55555555-5555-4555-8555-555555555555" })
+      .expect(200)).body, ["data", "orderNo"]);
+    await memberSession.agent
+      .post(`/api/v1/member/orders/${orderNo}/pay`)
+      .set("X-CSRF-Token", memberSession.csrfToken)
+      .send({})
+      .expect(200);
+
+    const [shopOrderRows] = await pool.query<ShopOrderNoRow[]>(
+      `SELECT so.shop_order_no
+         FROM shop_orders so
+         JOIN master_orders mo ON mo.id = so.master_order_id
+        WHERE mo.order_no = ?
+        ORDER BY so.shop_id ASC`,
+      [orderNo]
+    );
+    const firstShopOrderNo = shopOrderRows[0]?.shop_order_no;
+    const secondShopOrderNo = shopOrderRows[1]?.shop_order_no;
+    if (firstShopOrderNo === undefined || secondShopOrderNo === undefined) {
+      throw new Error("测试订单缺少子订单");
+    }
+
+    await otherOwnerSession.agent
+      .post(`/api/v1/owner/shop-orders/${firstShopOrderNo}/ship`)
+      .set("X-CSRF-Token", otherOwnerSession.csrfToken)
+      .send({})
+      .expect(404);
+    await ownerASession.agent
+      .post(`/api/v1/owner/shop-orders/${firstShopOrderNo}/ship`)
+      .set("X-CSRF-Token", ownerASession.csrfToken)
+      .send({})
+      .expect(200);
+    await ownerASession.agent
+      .post(`/api/v1/owner/shop-orders/${firstShopOrderNo}/ship`)
+      .set("X-CSRF-Token", ownerASession.csrfToken)
+      .send({})
+      .expect(409)
+      .expect((response) => {
+        expect(errorResponseSchema.parse(response.body).error.code).toBe("ORDER_STATE_CONFLICT");
+      });
+    await ownerBSession.agent
+      .post(`/api/v1/owner/shop-orders/${secondShopOrderNo}/ship`)
+      .set("X-CSRF-Token", ownerBSession.csrfToken)
+      .send({})
+      .expect(200);
+
+    await memberSession.agent
+      .post(`/api/v1/member/shop-orders/${firstShopOrderNo}/confirm`)
+      .set("X-CSRF-Token", memberSession.csrfToken)
+      .send({})
+      .expect(200);
+    const [statusBeforeRows] = await pool.query<OrderStatusRow[]>(
+      "SELECT status FROM master_orders WHERE order_no = ?",
+      [orderNo]
+    );
+    expect(statusBeforeRows[0]?.status).toBe("PAID");
+
+    await memberSession.agent
+      .post(`/api/v1/member/shop-orders/${secondShopOrderNo}/confirm`)
+      .set("X-CSRF-Token", memberSession.csrfToken)
+      .send({})
+      .expect(200);
+    await memberSession.agent
+      .post(`/api/v1/member/shop-orders/${secondShopOrderNo}/confirm`)
+      .set("X-CSRF-Token", memberSession.csrfToken)
+      .send({})
+      .expect(409)
+      .expect((response) => {
+        expect(errorResponseSchema.parse(response.body).error.code).toBe("ORDER_STATE_CONFLICT");
+      });
+
+    const [statusAfterRows] = await pool.query<OrderStatusRow[]>(
+      "SELECT status FROM master_orders WHERE order_no = ?",
+      [orderNo]
+    );
+    expect(statusAfterRows[0]?.status).toBe("COMPLETED");
+    await adminSession.agent.get("/api/v1/admin/audit-logs").expect(200).expect((response) => {
+      expect(readData(response.body)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ tableName: "shop_orders", action: "STATUS_CHANGE" }),
         expect.objectContaining({ tableName: "master_orders", action: "STATUS_CHANGE" })
       ]));
     });

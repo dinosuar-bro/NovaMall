@@ -5,9 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ApiClientError,
   fetchCsrf,
+  getCart,
   getCurrentSession,
   getMyMerchantApplication,
   getPrivateProfile,
+  listAddresses,
+  listAuditLogs,
+  listMemberOrders,
+  listMemberShopOrders,
+  listOwnerShopOrders,
+  listTopProducts,
   listPublicCategories,
   listPublicProducts,
   login,
@@ -25,17 +32,30 @@ vi.mock("../api/client.js", () => ({
     }
   },
   fetchCsrf: vi.fn(),
+  getCart: vi.fn(),
   getCurrentSession: vi.fn(),
   getMyMerchantApplication: vi.fn(),
   getPrivateProfile: vi.fn(),
   getOwnerShop: vi.fn(),
+  listAddresses: vi.fn(),
+  listAuditLogs: vi.fn(),
   listAdminCategories: vi.fn(),
+  listMemberOrders: vi.fn(),
+  listMemberShopOrders: vi.fn(),
   listOwnerProducts: vi.fn(),
+  listOwnerShopOrders: vi.fn(),
+  listTopProducts: vi.fn(),
   listPublicCategories: vi.fn(),
   listPublicProducts: vi.fn(),
+  addCartItem: vi.fn(),
+  checkoutCart: vi.fn(),
+  confirmShopOrder: vi.fn(),
+  createAddress: vi.fn(),
   createCategory: vi.fn(),
   createOwnerProduct: vi.fn(),
+  payOrder: vi.fn(),
   publishOwnerProduct: vi.fn(),
+  shipShopOrder: vi.fn(),
   uploadProductImage: vi.fn(),
   listMerchantApplications: vi.fn(),
   submitMerchantApplication: vi.fn(),
@@ -48,9 +68,16 @@ vi.mock("../api/client.js", () => ({
 }));
 
 const mockedFetchCsrf = vi.mocked(fetchCsrf);
+const mockedGetCart = vi.mocked(getCart);
 const mockedGetCurrentSession = vi.mocked(getCurrentSession);
 const mockedGetMyMerchantApplication = vi.mocked(getMyMerchantApplication);
 const mockedGetPrivateProfile = vi.mocked(getPrivateProfile);
+const mockedListAddresses = vi.mocked(listAddresses);
+const mockedListAuditLogs = vi.mocked(listAuditLogs);
+const mockedListMemberOrders = vi.mocked(listMemberOrders);
+const mockedListMemberShopOrders = vi.mocked(listMemberShopOrders);
+const mockedListOwnerShopOrders = vi.mocked(listOwnerShopOrders);
+const mockedListTopProducts = vi.mocked(listTopProducts);
 const mockedListPublicCategories = vi.mocked(listPublicCategories);
 const mockedListPublicProducts = vi.mocked(listPublicProducts);
 const mockedLogin = vi.mocked(login);
@@ -62,6 +89,7 @@ describe("App 路由守卫", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedFetchCsrf.mockResolvedValue("csrf-token");
+    mockedGetCart.mockResolvedValue({ items: [], totalAmount: "0.00" });
     mockedGetMyMerchantApplication.mockResolvedValue(null);
     mockedGetPrivateProfile.mockResolvedValue({
       id: "1",
@@ -70,6 +98,12 @@ describe("App 路由守卫", () => {
       phone: "13800138000",
       roles: ["MEMBER"]
     });
+    mockedListAddresses.mockResolvedValue([]);
+    mockedListAuditLogs.mockResolvedValue([]);
+    mockedListMemberOrders.mockResolvedValue([]);
+    mockedListMemberShopOrders.mockResolvedValue([]);
+    mockedListOwnerShopOrders.mockResolvedValue([]);
+    mockedListTopProducts.mockResolvedValue([]);
     mockedListPublicCategories.mockResolvedValue([]);
     mockedListPublicProducts.mockResolvedValue({ data: [], meta: { page: 1, pageSize: 20, total: 0 } });
   });
@@ -249,6 +283,51 @@ describe("App 路由守卫", () => {
     fireEvent.click(screen.getByRole("link", { name: "开店申请" }));
 
     expect(await screen.findByRole("heading", { level: 2, name: "开店申请" })).toBeInTheDocument();
+  });
+
+  it("会员侧边栏可进入购物车与订单", async () => {
+    mockedGetCurrentSession.mockResolvedValue({
+      user: {
+        id: "1",
+        username: "member01",
+        displayName: "会员一",
+        roles: ["MEMBER"]
+      },
+      csrfToken: "csrf-token"
+    });
+
+    renderApp("/member/catalog");
+    expect(await screen.findByRole("heading", { level: 2, name: "商品目录" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "购物车与订单" }));
+
+    expect(await screen.findByRole("heading", { level: 2, name: "购物车与订单" })).toBeInTheDocument();
+  });
+
+  it("店主和管理员侧边栏包含阶段 5 演示入口", async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: {
+        id: "2",
+        username: "owner01",
+        displayName: "店主一",
+        roles: ["MEMBER", "OWNER"]
+      },
+      csrfToken: "csrf-token"
+    });
+    renderApp("/owner/products");
+    expect(await screen.findByRole("link", { name: "订单履约" })).toBeInTheDocument();
+
+    cleanup();
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: {
+        id: "3",
+        username: "admin01",
+        displayName: "管理员",
+        roles: ["ADMIN"]
+      },
+      csrfToken: "csrf-token"
+    });
+    renderApp("/admin/categories");
+    expect(await screen.findByRole("link", { name: "数据库证据" })).toBeInTheDocument();
   });
 
   it("头像菜单仅提供个人主页和退出登录", async () => {

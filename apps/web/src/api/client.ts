@@ -1,9 +1,18 @@
 import {
   adminMerchantApplicationSchema,
+  addressInputSchema,
+  addressSchema,
   authSessionDataSchema,
+  auditLogSchema,
+  cartItemInputSchema,
+  cartItemUpdateSchema,
+  cartSchema,
   categoryInputSchema,
   categorySchema,
+  checkoutInputSchema,
+  checkoutResultSchema,
   loginInputSchema,
+  memberOrderSchema,
   merchantApplicationInputSchema,
   merchantApplicationRejectInputSchema,
   merchantApplicationSchema,
@@ -16,14 +25,25 @@ import {
   publicProductListSchema,
   publicProductSchema,
   registerInputSchema,
+  shopOrderSchema,
   shopSummarySchema,
   successResponseSchema,
+  topProductSchema,
   updatePrivateProfileInputSchema,
+  type Address,
+  type AddressInput,
   type AdminMerchantApplication,
+  type AuditLog,
   type AuthSessionData,
+  type Cart,
+  type CartItemInput,
+  type CartItemUpdate,
   type Category,
   type CategoryInput,
+  type CheckoutInput,
+  type CheckoutResult,
   type LoginInput,
+  type MemberOrder,
   type MerchantApplication,
   type MerchantApplicationInput,
   type MerchantApplicationRejectInput,
@@ -35,7 +55,9 @@ import {
   type PrivateProfile,
   type PublicProductList,
   type RegisterInput,
+  type ShopOrder,
   type ShopSummary,
+  type TopProduct,
   type UpdatePrivateProfileInput
 } from "@novamall/shared";
 import { z } from "zod";
@@ -221,12 +243,92 @@ export async function uploadProductImage(file: File, csrfToken: string): Promise
   return successResponseSchema(z.object({ path: z.string() })).parse(response).data.path;
 }
 
+export async function listAddresses(): Promise<Address[]> {
+  const response = await request("/member/addresses", { method: "GET" });
+  return successResponseSchema(z.array(addressSchema)).parse(response).data;
+}
+
+export async function createAddress(input: AddressInput, csrfToken: string): Promise<Address> {
+  const response = await writeJson("/member/addresses", "POST", addressInputSchema.parse(input), csrfToken);
+  return successResponseSchema(addressSchema).parse(response).data;
+}
+
+export async function getCart(): Promise<Cart> {
+  const response = await request("/member/cart", { method: "GET" });
+  return successResponseSchema(cartSchema).parse(response).data;
+}
+
+export async function addCartItem(input: CartItemInput, csrfToken: string): Promise<Cart> {
+  const response = await writeJson("/member/cart/items", "POST", cartItemInputSchema.parse(input), csrfToken);
+  return successResponseSchema(cartSchema).parse(response).data;
+}
+
+export async function updateCartItem(itemId: string, input: CartItemUpdate, csrfToken: string): Promise<Cart> {
+  const response = await writeJson(
+    `/member/cart/items/${itemId}`,
+    "PATCH",
+    cartItemUpdateSchema.parse(input),
+    csrfToken
+  );
+  return successResponseSchema(cartSchema).parse(response).data;
+}
+
+export async function deleteCartItem(itemId: string, csrfToken: string): Promise<Cart> {
+  const response = await writeJson(`/member/cart/items/${itemId}`, "DELETE", {}, csrfToken);
+  return successResponseSchema(cartSchema).parse(response).data;
+}
+
+export async function checkoutCart(input: CheckoutInput, csrfToken: string): Promise<CheckoutResult> {
+  const response = await writeJson("/member/checkout", "POST", checkoutInputSchema.parse(input), csrfToken);
+  return successResponseSchema(checkoutResultSchema).parse(response).data;
+}
+
+export async function listMemberOrders(): Promise<MemberOrder[]> {
+  const response = await request("/member/orders", { method: "GET" });
+  return successResponseSchema(z.array(memberOrderSchema)).parse(response).data;
+}
+
+export async function listMemberShopOrders(): Promise<ShopOrder[]> {
+  const response = await request("/member/shop-orders", { method: "GET" });
+  return successResponseSchema(z.array(shopOrderSchema)).parse(response).data;
+}
+
+export async function payOrder(orderNo: string, csrfToken: string): Promise<MemberOrder> {
+  const response = await writeJson(`/member/orders/${orderNo}/pay`, "POST", {}, csrfToken);
+  return successResponseSchema(memberOrderSchema).parse(response).data;
+}
+
+export async function confirmShopOrder(shopOrderNo: string, csrfToken: string): Promise<ShopOrder> {
+  const response = await writeJson(`/member/shop-orders/${shopOrderNo}/confirm`, "POST", {}, csrfToken);
+  return successResponseSchema(shopOrderSchema).parse(response).data;
+}
+
+export async function listOwnerShopOrders(): Promise<ShopOrder[]> {
+  const response = await request("/owner/shop-orders", { method: "GET" });
+  return successResponseSchema(z.array(shopOrderSchema)).parse(response).data;
+}
+
+export async function shipShopOrder(shopOrderNo: string, csrfToken: string): Promise<ShopOrder> {
+  const response = await writeJson(`/owner/shop-orders/${shopOrderNo}/ship`, "POST", {}, csrfToken);
+  return successResponseSchema(shopOrderSchema).parse(response).data;
+}
+
+export async function listAuditLogs(): Promise<AuditLog[]> {
+  const response = await request("/admin/audit-logs", { method: "GET" });
+  return successResponseSchema(z.array(auditLogSchema)).parse(response).data;
+}
+
+export async function listTopProducts(): Promise<TopProduct[]> {
+  const response = await request("/admin/database/top-products", { method: "GET" });
+  return successResponseSchema(z.array(topProductSchema)).parse(response).data;
+}
+
 async function writeAuth(path: string, body: RegisterInput | LoginInput, csrfToken: string): Promise<AuthSessionData> {
   const response = await writeJson(path, "POST", body, csrfToken);
   return successResponseSchema(authSessionDataSchema).parse(response).data;
 }
 
-async function writeJson(path: string, method: "POST" | "PUT" | "PATCH", body: object, csrfToken: string): Promise<unknown> {
+async function writeJson(path: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body: object, csrfToken: string): Promise<unknown> {
   return request(path, {
     method,
     headers: {

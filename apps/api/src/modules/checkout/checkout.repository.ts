@@ -84,6 +84,16 @@ interface MasterOrderStateRow extends RowDataPacket {
   status: string;
 }
 
+interface ShopOrderStateRow extends RowDataPacket {
+  id: string;
+  master_order_id: string;
+  status: string;
+}
+
+interface RemainingShopOrderRow extends RowDataPacket {
+  count: number;
+}
+
 interface OutOrderNoRow extends RowDataPacket {
   order_no: string | null;
 }
@@ -261,6 +271,17 @@ export class CheckoutRepository {
     return rows.map(mapMemberOrder);
   }
 
+  async listMemberShopOrders(userId: string): Promise<ShopOrder[]> {
+    const [rows] = await this.pool.query<ShopOrderRow[]>(
+      `${shopOrderSelectSql}
+       WHERE mo.buyer_user_id = ?
+       GROUP BY so.id, so.shop_order_no, mo.order_no, so.status, so.subtotal_amount, so.created_at
+       ORDER BY so.created_at DESC, so.id DESC`,
+      [userId]
+    );
+    return rows.map(mapShopOrder);
+  }
+
   async payOrder(userId: string, orderNo: string, requestId: string): Promise<MemberOrder> {
     const connection = await this.pool.getConnection();
     try {
@@ -371,6 +392,78 @@ export class CheckoutRepository {
     return rows.map(mapShopOrder);
   }
 
+  async shipShopOrder(ownerUserId: string, shopOrderNo: string, requestId: string): Promise<ShopOrder> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await setAuditContext(connection, ownerUserId, requestId);
+      const shopOrder = await findOwnerShopOrderForUpdate(connection, ownerUserId, shopOrderNo);
+      if (shopOrder === null) {
+        throw new AppError(404, "NOT_FOUND", "子订单不存在");
+      }
+      if (shopOrder.status !== "PENDING_SHIPMENT") {
+        throw new AppError(409, "ORDER_STATE_CONFLICT", "当前子订单状态不能发货");
+      }
+      await connection.execute(
+        "UPDATE shop_orders SET status = 'SHIPPED', shipped_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
+        [shopOrder.id]
+      );
+      await connection.commit();
+      const updated = await this.findOwnerShopOrderByNo(ownerUserId, shopOrderNo);
+      if (updated === null) {
+        throw new AppError(500, "INTERNAL_ERROR", "发货后子订单查询失败");
+      }
+      return updated;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      await clearAuditContext(connection);
+      connection.release();
+    }
+  }
+
+  async confirmShopOrder(userId: string, shopOrderNo: string, requestId: string): Promise<ShopOrder> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await setAuditContext(connection, userId, requestId);
+      const shopOrder = await findMemberShopOrderForUpdate(connection, userId, shopOrderNo);
+      if (shopOrder === null) {
+        throw new AppError(404, "NOT_FOUND", "子订单不存在");
+      }
+      if (shopOrder.status !== "SHIPPED") {
+        throw new AppError(409, "ORDER_STATE_CONFLICT", "当前子订单状态不能确认收货");
+      }
+      await connection.execute(
+        "UPDATE shop_orders SET status = 'COMPLETED', completed_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
+        [shopOrder.id]
+      );
+      const [remainingRows] = await connection.query<RemainingShopOrderRow[]>(
+        "SELECT COUNT(*) AS count FROM shop_orders WHERE master_order_id = ? AND status <> 'COMPLETED'",
+        [shopOrder.master_order_id]
+      );
+      if ((remainingRows[0]?.count ?? 0) === 0) {
+        await connection.execute(
+          "UPDATE master_orders SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
+          [shopOrder.master_order_id]
+        );
+      }
+      await connection.commit();
+      const updated = await this.findMemberShopOrderByNo(userId, shopOrderNo);
+      if (updated === null) {
+        throw new AppError(500, "INTERNAL_ERROR", "确认收货后子订单查询失败");
+      }
+      return updated;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      await clearAuditContext(connection);
+      connection.release();
+    }
+  }
+
   async listAuditLogs(): Promise<AuditLog[]> {
     const [rows] = await this.pool.query<AuditLogRow[]>(
       `SELECT
@@ -437,6 +530,26 @@ export class CheckoutRepository {
     );
     return rows[0] === undefined ? null : mapMemberOrder(rows[0]);
   }
+
+  private async findOwnerShopOrderByNo(ownerUserId: string, shopOrderNo: string): Promise<ShopOrder | null> {
+    const [rows] = await this.pool.query<ShopOrderRow[]>(
+      `${shopOrderSelectSql}
+       WHERE s.owner_user_id = ? AND so.shop_order_no = ?
+       GROUP BY so.id, so.shop_order_no, mo.order_no, so.status, so.subtotal_amount, so.created_at`,
+      [ownerUserId, shopOrderNo]
+    );
+    return rows[0] === undefined ? null : mapShopOrder(rows[0]);
+  }
+
+  private async findMemberShopOrderByNo(userId: string, shopOrderNo: string): Promise<ShopOrder | null> {
+    const [rows] = await this.pool.query<ShopOrderRow[]>(
+      `${shopOrderSelectSql}
+       WHERE mo.buyer_user_id = ? AND so.shop_order_no = ?
+       GROUP BY so.id, so.shop_order_no, mo.order_no, so.status, so.subtotal_amount, so.created_at`,
+      [userId, shopOrderNo]
+    );
+    return rows[0] === undefined ? null : mapShopOrder(rows[0]);
+  }
 }
 
 const addressSelectSql = `SELECT
@@ -452,6 +565,18 @@ const addressSelectSql = `SELECT
   a.updated_at
  FROM addresses a`;
 
+const shopOrderSelectSql = `SELECT
+  so.shop_order_no,
+  mo.order_no AS master_order_no,
+  so.status,
+  CAST(so.subtotal_amount AS CHAR) AS subtotal_amount,
+  COALESCE(SUM(oi.quantity), 0) AS item_count,
+  so.created_at
+ FROM shops s
+ JOIN shop_orders so ON so.shop_id = s.id
+ JOIN master_orders mo ON mo.id = so.master_order_id
+ LEFT JOIN order_items oi ON oi.shop_order_id = so.id`;
+
 async function findMasterOrderForUpdate(
   connection: PoolConnection,
   userId: string,
@@ -463,6 +588,42 @@ async function findMasterOrderForUpdate(
       WHERE buyer_user_id = ? AND order_no = ?
       FOR UPDATE`,
     [userId, orderNo]
+  );
+  return rows[0] ?? null;
+}
+
+async function findOwnerShopOrderForUpdate(
+  connection: PoolConnection,
+  ownerUserId: string,
+  shopOrderNo: string
+): Promise<ShopOrderStateRow | null> {
+  const [rows] = await connection.query<ShopOrderStateRow[]>(
+    `SELECT CAST(so.id AS CHAR) AS id,
+            CAST(so.master_order_id AS CHAR) AS master_order_id,
+            so.status
+       FROM shop_orders so
+       JOIN shops s ON s.id = so.shop_id
+      WHERE s.owner_user_id = ? AND so.shop_order_no = ?
+      FOR UPDATE`,
+    [ownerUserId, shopOrderNo]
+  );
+  return rows[0] ?? null;
+}
+
+async function findMemberShopOrderForUpdate(
+  connection: PoolConnection,
+  userId: string,
+  shopOrderNo: string
+): Promise<ShopOrderStateRow | null> {
+  const [rows] = await connection.query<ShopOrderStateRow[]>(
+    `SELECT CAST(so.id AS CHAR) AS id,
+            CAST(so.master_order_id AS CHAR) AS master_order_id,
+            so.status
+       FROM shop_orders so
+       JOIN master_orders mo ON mo.id = so.master_order_id
+      WHERE mo.buyer_user_id = ? AND so.shop_order_no = ?
+      FOR UPDATE`,
+    [userId, shopOrderNo]
   );
   return rows[0] ?? null;
 }

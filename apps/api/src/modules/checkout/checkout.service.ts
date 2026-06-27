@@ -64,6 +64,10 @@ export class CheckoutService {
     return this.repository.listMemberOrders(userId);
   }
 
+  listMemberShopOrders(userId: string) {
+    return this.repository.listMemberShopOrders(userId);
+  }
+
   payOrder(userId: string, orderNo: string, requestId: string) {
     assertOrderNo(orderNo);
     return this.repository.payOrder(userId, orderNo, requestId);
@@ -74,8 +78,18 @@ export class CheckoutService {
     return this.repository.cancelOrder(userId, orderNo, requestId);
   }
 
+  confirmShopOrder(userId: string, shopOrderNo: string, requestId: string) {
+    assertShopOrderNo(shopOrderNo);
+    return this.repository.confirmShopOrder(userId, shopOrderNo, requestId);
+  }
+
   listOwnerShopOrders(ownerUserId: string) {
     return this.repository.listOwnerShopOrders(ownerUserId);
+  }
+
+  shipShopOrder(ownerUserId: string, shopOrderNo: string, requestId: string) {
+    assertShopOrderNo(shopOrderNo);
+    return this.repository.shipShopOrder(ownerUserId, shopOrderNo, requestId);
   }
 
   listAuditLogs() {
@@ -97,5 +111,12 @@ function assertOrderNo(value: string): void {
   const parsed = orderNoSchema.safeParse(value);
   if (!parsed.success) {
     throw new AppError(404, "NOT_FOUND", "订单不存在");
+  }
+}
+
+function assertShopOrderNo(value: string): void {
+  const parsed = orderNoSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new AppError(404, "NOT_FOUND", "子订单不存在");
   }
 }

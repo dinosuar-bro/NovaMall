@@ -8,9 +8,12 @@ import { RegisterPage } from "../pages/register-page.js";
 import { ProfilePage } from "../pages/profile-page.js";
 import {
   AdminCategoryPanel,
+  AdminDatabaseEvidencePanel,
   AdminMerchantApplicationsPanel,
+  MemberCartOrdersPanel,
   MemberCatalogPanel,
   MemberMerchantApplicationPanel,
+  OwnerOrdersPanel,
   OwnerProductPanel,
   OwnerShopPanel
 } from "../pages/role-page.js";
@@ -29,13 +32,16 @@ export function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/member" element={<ProtectedRedirect role="MEMBER" to="/member/catalog" />} />
       <Route path="/member/catalog" element={<ProtectedPage role="MEMBER" title="商品目录"><MemberCatalogPanel /></ProtectedPage>} />
+      <Route path="/member/orders" element={<ProtectedPage role="MEMBER" title="购物车与订单"><MemberCartOrdersPanel /></ProtectedPage>} />
       <Route path="/member/applications" element={<ProtectedPage role="MEMBER" title="开店申请"><MemberMerchantApplicationPanel /></ProtectedPage>} />
       <Route path="/owner" element={<ProtectedRedirect role="OWNER" to="/owner/products" />} />
       <Route path="/owner/shop" element={<ProtectedPage role="OWNER" title="店铺资料"><OwnerShopPanel /></ProtectedPage>} />
       <Route path="/owner/products" element={<ProtectedPage role="OWNER" title="商品管理"><OwnerProductPanel /></ProtectedPage>} />
+      <Route path="/owner/orders" element={<ProtectedPage role="OWNER" title="订单履约"><OwnerOrdersPanel /></ProtectedPage>} />
       <Route path="/admin" element={<ProtectedRedirect role="ADMIN" to="/admin/categories" />} />
       <Route path="/admin/categories" element={<ProtectedPage role="ADMIN" title="分类管理"><AdminCategoryPanel /></ProtectedPage>} />
       <Route path="/admin/applications" element={<ProtectedPage role="ADMIN" title="开店审核"><AdminMerchantApplicationsPanel /></ProtectedPage>} />
+      <Route path="/admin/database" element={<ProtectedPage role="ADMIN" title="数据库证据"><AdminDatabaseEvidencePanel /></ProtectedPage>} />
       <Route path="/profile" element={<ProtectedProfilePage />} />
     </Routes>
   );
@@ -135,12 +141,14 @@ export function RoleNav({ role }: { role: RoleCode }) {
       {role === "MEMBER" ? (
         <>
           <NavLink to="/member/catalog">商品目录</NavLink>
+          <NavLink to="/member/orders">购物车与订单</NavLink>
           <NavLink to="/member/applications">开店申请</NavLink>
         </>
       ) : null}
       {role === "OWNER" ? (
         <>
           <NavLink to="/owner/products">商品管理</NavLink>
+          <NavLink to="/owner/orders">订单履约</NavLink>
           <NavLink to="/owner/shop">店铺资料</NavLink>
         </>
       ) : null}
@@ -148,6 +156,7 @@ export function RoleNav({ role }: { role: RoleCode }) {
         <>
           <NavLink to="/admin/categories">分类管理</NavLink>
           <NavLink to="/admin/applications">开店审核</NavLink>
+          <NavLink to="/admin/database">数据库证据</NavLink>
         </>
       ) : null}
     </nav>

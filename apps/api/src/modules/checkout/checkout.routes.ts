@@ -22,9 +22,12 @@ export function createCheckoutRouter(
   router.delete("/member/cart/items/:itemId", requireAuth(authRepository), requireRole("MEMBER"), csrfProtection, controller.deleteCartItem);
   router.post("/member/checkout", requireAuth(authRepository), requireRole("MEMBER"), csrfProtection, controller.checkout);
   router.get("/member/orders", requireAuth(authRepository), requireRole("MEMBER"), controller.listMemberOrders);
+  router.get("/member/shop-orders", requireAuth(authRepository), requireRole("MEMBER"), controller.listMemberShopOrders);
   router.post("/member/orders/:orderNo/pay", requireAuth(authRepository), requireRole("MEMBER"), csrfProtection, controller.payOrder);
   router.post("/member/orders/:orderNo/cancel", requireAuth(authRepository), requireRole("MEMBER"), csrfProtection, controller.cancelOrder);
+  router.post("/member/shop-orders/:shopOrderNo/confirm", requireAuth(authRepository), requireRole("MEMBER"), csrfProtection, controller.confirmShopOrder);
   router.get("/owner/shop-orders", requireAuth(authRepository), requireRole("OWNER"), controller.listOwnerShopOrders);
+  router.post("/owner/shop-orders/:shopOrderNo/ship", requireAuth(authRepository), requireRole("OWNER"), csrfProtection, controller.shipShopOrder);
   router.get("/admin/audit-logs", requireAuth(authRepository), requireRole("ADMIN"), controller.listAuditLogs);
   router.get("/admin/database/top-products", requireAuth(authRepository), requireRole("ADMIN"), controller.listTopProducts);
 

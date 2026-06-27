@@ -4,17 +4,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ApiClientError,
+  addCartItem,
+  checkoutCart,
+  confirmShopOrder,
+  createAddress,
   fetchCsrf,
+  getCart,
   getMyMerchantApplication,
   getOwnerShop,
+  listAddresses,
+  listAuditLogs,
   listAdminCategories,
+  listMemberOrders,
+  listMemberShopOrders,
   listOwnerProducts,
+  listOwnerShopOrders,
+  listTopProducts,
   listPublicCategories,
   listPublicProducts,
   listMerchantApplications,
+  payOrder,
   createCategory,
   createOwnerProduct,
   rejectMerchantApplication,
+  shipShopOrder,
   submitMerchantApplication,
   uploadProductImage
 } from "../api/client.js";
@@ -27,33 +40,59 @@ vi.mock("../api/client.js", () => ({
       this.name = "ApiClientError";
     }
   },
+  addCartItem: vi.fn(),
+  checkoutCart: vi.fn(),
+  confirmShopOrder: vi.fn(),
+  createAddress: vi.fn(),
   fetchCsrf: vi.fn(),
+  getCart: vi.fn(),
   getMyMerchantApplication: vi.fn(),
   getOwnerShop: vi.fn(),
+  listAddresses: vi.fn(),
+  listAuditLogs: vi.fn(),
   listAdminCategories: vi.fn(),
+  listMemberOrders: vi.fn(),
+  listMemberShopOrders: vi.fn(),
   listOwnerProducts: vi.fn(),
+  listOwnerShopOrders: vi.fn(),
+  listTopProducts: vi.fn(),
   listPublicCategories: vi.fn(),
   listPublicProducts: vi.fn(),
   listMerchantApplications: vi.fn(),
   createCategory: vi.fn(),
   createOwnerProduct: vi.fn(),
+  payOrder: vi.fn(),
   publishOwnerProduct: vi.fn(),
+  shipShopOrder: vi.fn(),
   submitMerchantApplication: vi.fn(),
   uploadProductImage: vi.fn(),
   approveMerchantApplication: vi.fn(),
   rejectMerchantApplication: vi.fn()
 }));
 
+const mockedAddCartItem = vi.mocked(addCartItem);
+const mockedCheckoutCart = vi.mocked(checkoutCart);
+const mockedConfirmShopOrder = vi.mocked(confirmShopOrder);
+const mockedCreateAddress = vi.mocked(createAddress);
 const mockedFetchCsrf = vi.mocked(fetchCsrf);
+const mockedGetCart = vi.mocked(getCart);
 const mockedGetMyMerchantApplication = vi.mocked(getMyMerchantApplication);
 const mockedGetOwnerShop = vi.mocked(getOwnerShop);
+const mockedListAddresses = vi.mocked(listAddresses);
+const mockedListAuditLogs = vi.mocked(listAuditLogs);
 const mockedListAdminCategories = vi.mocked(listAdminCategories);
+const mockedListMemberOrders = vi.mocked(listMemberOrders);
+const mockedListMemberShopOrders = vi.mocked(listMemberShopOrders);
 const mockedListOwnerProducts = vi.mocked(listOwnerProducts);
+const mockedListOwnerShopOrders = vi.mocked(listOwnerShopOrders);
+const mockedListTopProducts = vi.mocked(listTopProducts);
 const mockedListPublicCategories = vi.mocked(listPublicCategories);
 const mockedListPublicProducts = vi.mocked(listPublicProducts);
 const mockedListMerchantApplications = vi.mocked(listMerchantApplications);
 const mockedCreateCategory = vi.mocked(createCategory);
 const mockedCreateOwnerProduct = vi.mocked(createOwnerProduct);
+const mockedPayOrder = vi.mocked(payOrder);
+const mockedShipShopOrder = vi.mocked(shipShopOrder);
 const mockedUploadProductImage = vi.mocked(uploadProductImage);
 const mockedSubmitMerchantApplication = vi.mocked(submitMerchantApplication);
 const mockedRejectMerchantApplication = vi.mocked(rejectMerchantApplication);
@@ -62,10 +101,17 @@ describe("RolePage 商户入驻区块", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedFetchCsrf.mockResolvedValue("csrf-token");
+    mockedListAddresses.mockResolvedValue([]);
+    mockedGetCart.mockResolvedValue({ items: [], totalAmount: "0.00" });
     mockedListPublicCategories.mockResolvedValue([]);
     mockedListPublicProducts.mockResolvedValue({ data: [], meta: { page: 1, pageSize: 20, total: 0 } });
     mockedListAdminCategories.mockResolvedValue({ data: [], meta: { page: 1, pageSize: 20, total: 0 } });
+    mockedListAuditLogs.mockResolvedValue([]);
+    mockedListMemberOrders.mockResolvedValue([]);
+    mockedListMemberShopOrders.mockResolvedValue([]);
     mockedListOwnerProducts.mockResolvedValue({ data: [], meta: { page: 1, pageSize: 20, total: 0 } });
+    mockedListOwnerShopOrders.mockResolvedValue([]);
+    mockedListTopProducts.mockResolvedValue([]);
     mockedUploadProductImage.mockResolvedValue("/uploads/products/2026/06/test.png");
   });
 
@@ -377,6 +423,136 @@ describe("RolePage 商户入驻区块", () => {
     );
   });
 
+  it("会员可从商品卡片加入购物车", async () => {
+    mockedGetMyMerchantApplication.mockResolvedValue(null);
+    mockedListPublicProducts.mockResolvedValue({
+      data: [{
+        id: "10",
+        name: "高山苹果",
+        description: "现摘现发，适合家庭分享",
+        price: "19.90",
+        stock: 20,
+        mainImagePath: "/uploads/products/2026/06/apple.png",
+        category: { id: "1", name: "新鲜水果" },
+        shop: { id: "3", name: "水果公开店" },
+        createdAt: "2026-06-24T01:00:00.000Z",
+        updatedAt: "2026-06-24T01:00:00.000Z"
+      }],
+      meta: { page: 1, pageSize: 20, total: 1 }
+    });
+    mockedAddCartItem.mockResolvedValue({ items: [], totalAmount: "0.00" });
+
+    renderRole("MEMBER");
+    expect(await screen.findByText("高山苹果")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "加入购物车：高山苹果" }));
+
+    await waitFor(() => {
+      expect(mockedAddCartItem).toHaveBeenCalledWith({ productId: "10", quantity: 1 }, "csrf-token");
+    });
+    expect(await screen.findByText("已加入购物车。")).toBeInTheDocument();
+  });
+
+  it("会员购物车与订单面板可创建地址、结算、支付和确认收货", async () => {
+    mockedGetMyMerchantApplication.mockResolvedValue(null);
+    mockedListAddresses.mockResolvedValue([{
+      id: "1",
+      receiverName: "张三",
+      maskedPhone: "139****0000",
+      province: "广东省",
+      city: "深圳市",
+      district: "南山区",
+      detail: "科技园 1 号",
+      isDefault: true,
+      createdAt: "2026-06-24T01:00:00.000Z",
+      updatedAt: "2026-06-24T01:00:00.000Z"
+    }]);
+    mockedGetCart.mockResolvedValue({
+      items: [{
+        id: "8",
+        productId: "10",
+        productName: "高山苹果",
+        shopId: "3",
+        shopName: "水果公开店",
+        unitPrice: "19.90",
+        quantity: 2,
+        lineAmount: "39.80",
+        stock: 20,
+        mainImagePath: null,
+        available: true
+      }],
+      totalAmount: "39.80"
+    });
+    mockedListMemberOrders.mockResolvedValue([{
+      orderNo: "MO202606280001",
+      status: "PENDING_PAYMENT",
+      totalAmount: "39.80",
+      shopOrderCount: 1,
+      createdAt: "2026-06-24T01:00:00.000Z"
+    }]);
+    mockedListMemberShopOrders.mockResolvedValue([{
+      shopOrderNo: "SO202606280001",
+      masterOrderNo: "MO202606280001",
+      status: "SHIPPED",
+      subtotalAmount: "39.80",
+      itemCount: 2,
+      createdAt: "2026-06-24T01:00:00.000Z"
+    }]);
+    mockedCreateAddress.mockResolvedValue({
+      id: "2",
+      receiverName: "李四",
+      maskedPhone: "138****0000",
+      province: "广东省",
+      city: "深圳市",
+      district: "南山区",
+      detail: "软件园 2 号",
+      isDefault: true,
+      createdAt: "2026-06-24T01:00:00.000Z",
+      updatedAt: "2026-06-24T01:00:00.000Z"
+    });
+    mockedCheckoutCart.mockResolvedValue({ orderNo: "MO202606280001" });
+    mockedPayOrder.mockResolvedValue({
+      orderNo: "MO202606280001",
+      status: "PAID",
+      totalAmount: "39.80",
+      shopOrderCount: 1,
+      createdAt: "2026-06-24T01:00:00.000Z"
+    });
+    mockedConfirmShopOrder.mockResolvedValue({
+      shopOrderNo: "SO202606280001",
+      masterOrderNo: "MO202606280001",
+      status: "COMPLETED",
+      subtotalAmount: "39.80",
+      itemCount: 2,
+      createdAt: "2026-06-24T01:00:00.000Z"
+    });
+
+    renderRole("MEMBER");
+    expect(await screen.findByRole("heading", { name: "购物车与订单" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("收货人"), { target: { value: "李四" } });
+    fireEvent.change(screen.getByLabelText("收货手机号"), { target: { value: "13800000000" } });
+    fireEvent.change(screen.getByLabelText("省份"), { target: { value: "广东省" } });
+    fireEvent.change(screen.getByLabelText("城市"), { target: { value: "深圳市" } });
+    fireEvent.change(screen.getByLabelText("区县"), { target: { value: "南山区" } });
+    fireEvent.change(screen.getByLabelText("详细地址"), { target: { value: "软件园 2 号" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存地址" }));
+    await waitFor(() => {
+      expect(mockedCreateAddress).toHaveBeenCalled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "提交结算" }));
+    await waitFor(() => {
+      expect(mockedCheckoutCart).toHaveBeenCalledWith(expect.objectContaining({ addressId: "2" }), "csrf-token");
+    });
+    fireEvent.click(screen.getByRole("button", { name: "模拟支付：MO202606280001" }));
+    await waitFor(() => {
+      expect(mockedPayOrder).toHaveBeenCalledWith("MO202606280001", "csrf-token");
+    });
+    fireEvent.click(screen.getByRole("button", { name: "确认收货：SO202606280001" }));
+
+    await waitFor(() => {
+      expect(mockedConfirmShopOrder).toHaveBeenCalledWith("SO202606280001", "csrf-token");
+    });
+  });
+
   it("公开商品图片加载失败时显示统一占位图", async () => {
     mockedGetMyMerchantApplication.mockResolvedValue(null);
     mockedListPublicProducts.mockResolvedValue({
@@ -476,6 +652,78 @@ describe("RolePage 商户入驻区块", () => {
         mainImagePath: null
       }, "csrf-token");
     });
+  });
+
+  it("店主订单履约面板只对待发货子订单显示发货按钮", async () => {
+    mockedGetOwnerShop.mockResolvedValue({
+      id: "3",
+      name: "星选烘焙铺",
+      description: "主营社区烘焙和礼盒",
+      status: "ACTIVE"
+    });
+    mockedListOwnerShopOrders.mockResolvedValue([
+      {
+        shopOrderNo: "SO202606280001",
+        masterOrderNo: "MO202606280001",
+        status: "PENDING_SHIPMENT",
+        subtotalAmount: "39.80",
+        itemCount: 2,
+        createdAt: "2026-06-24T01:00:00.000Z"
+      },
+      {
+        shopOrderNo: "SO202606280002",
+        masterOrderNo: "MO202606280002",
+        status: "SHIPPED",
+        subtotalAmount: "19.90",
+        itemCount: 1,
+        createdAt: "2026-06-24T01:00:00.000Z"
+      }
+    ]);
+    mockedShipShopOrder.mockResolvedValue({
+      shopOrderNo: "SO202606280001",
+      masterOrderNo: "MO202606280001",
+      status: "SHIPPED",
+      subtotalAmount: "39.80",
+      itemCount: 2,
+      createdAt: "2026-06-24T01:00:00.000Z"
+    });
+
+    renderRole("OWNER");
+    expect(await screen.findByRole("heading", { name: "订单履约" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "发货：SO202606280001" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "发货：SO202606280002" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "发货：SO202606280001" }));
+
+    await waitFor(() => {
+      expect(mockedShipShopOrder).toHaveBeenCalledWith("SO202606280001", "csrf-token");
+    });
+  });
+
+  it("管理员数据库证据面板只读展示审计日志和 Top 10", async () => {
+    mockedListMerchantApplications.mockResolvedValue({ data: [], meta: { page: 1, pageSize: 20, total: 0 } });
+    mockedListAuditLogs.mockResolvedValue([{
+      id: "1",
+      actorUserId: "2",
+      requestId: "req-1",
+      tableName: "shop_orders",
+      recordId: "5",
+      action: "STATUS_CHANGE",
+      createdAt: "2026-06-24T01:00:00.000Z"
+    }]);
+    mockedListTopProducts.mockResolvedValue([{
+      productId: "10",
+      productName: "高山苹果",
+      soldQuantity: 8,
+      salesAmount: "159.20",
+      salesRank: 1
+    }]);
+
+    renderRole("ADMIN");
+
+    expect(await screen.findByRole("heading", { name: "数据库证据" })).toBeInTheDocument();
+    expect(screen.getByText("shop_orders")).toBeInTheDocument();
+    expect(screen.getByText("高山苹果")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/SQL/i)).not.toBeInTheDocument();
   });
 });
 

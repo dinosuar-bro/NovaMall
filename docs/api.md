@@ -70,11 +70,8 @@
 |---|---|---|---|
 | GET | `/auth/profile` | 已登录 | 查看自己的资料 |
 | PATCH | `/auth/profile` | 已登录 | 修改展示名、手机号或密码 |
-| GET | `/users/me/addresses` | 会员 | 地址列表 |
-| POST | `/users/me/addresses` | 会员 | 新增地址 |
-| PATCH | `/users/me/addresses/:addressId` | 会员 | 修改自己的地址 |
-| DELETE | `/users/me/addresses/:addressId` | 会员 | 删除自己的地址 |
-| PUT | `/users/me/addresses/:addressId/default` | 会员 | 事务化设置默认地址 |
+| GET | `/member/addresses` | 会员 | 地址列表 |
+| POST | `/member/addresses` | 会员 | 新增地址 |
 
 所有地址操作必须以当前 Session 用户 ID 作为查询条件，不能只按地址 ID 操作。
 
@@ -146,12 +143,11 @@
 
 | 方法 | 路径 | 角色 | 说明 |
 |---|---|---|---|
-| GET | `/cart` | 会员 | 按店铺聚合购物车 |
-| POST | `/cart/items` | 会员 | 添加商品或原子增加数量 |
-| PATCH | `/cart/items/:itemId` | 会员 | 修改数量 |
-| DELETE | `/cart/items/:itemId` | 会员 | 删除一项 |
-| DELETE | `/cart` | 会员 | 清空购物车 |
-| POST | `/checkout` | 会员 | 调用存储过程跨店结算 |
+| GET | `/member/cart` | 会员 | 按店铺聚合购物车 |
+| POST | `/member/cart/items` | 会员 | 添加商品或原子增加数量 |
+| PATCH | `/member/cart/items/:itemId` | 会员 | 修改数量 |
+| DELETE | `/member/cart/items/:itemId` | 会员 | 删除一项 |
+| POST | `/member/checkout` | 会员 | 调用存储过程跨店结算 |
 
 结算请求：
 
@@ -168,15 +164,13 @@
 
 | 方法 | 路径 | 角色 | 说明 |
 |---|---|---|---|
-| GET | `/orders` | 会员 | 自己的总订单分页 |
-| GET | `/orders/:orderNo` | 会员 | 自己的订单详情 |
-| POST | `/orders/:orderNo/pay` | 会员 | 模拟支付 |
-| POST | `/orders/:orderNo/cancel` | 会员 | 取消待支付总订单 |
-| POST | `/shop-orders/:shopOrderNo/confirm` | 会员 | 确认收货 |
-| GET | `/owner/orders` | 店主 | 本店子订单分页 |
-| GET | `/owner/orders/:shopOrderNo` | 店主 | 本店子订单详情 |
-| POST | `/owner/orders/:shopOrderNo/ship` | 店主 | 发货 |
-| GET | `/admin/orders` | 管理员 | 全平台只读查询 |
+| GET | `/member/orders` | 会员 | 自己的总订单列表 |
+| GET | `/member/shop-orders` | 会员 | 自己的子订单列表，用于确认收货 |
+| POST | `/member/orders/:orderNo/pay` | 会员 | 模拟支付 |
+| POST | `/member/orders/:orderNo/cancel` | 会员 | 取消待支付总订单 |
+| POST | `/member/shop-orders/:shopOrderNo/confirm` | 会员 | 确认收货 |
+| GET | `/owner/shop-orders` | 店主 | 本店子订单列表 |
+| POST | `/owner/shop-orders/:shopOrderNo/ship` | 店主 | 发货 |
 
 支付、取消、发货和确认收货都使用带当前状态条件的更新。重复支付和重复状态操作返回原成功状态或 409，不产生重复副作用。
 
@@ -198,8 +192,8 @@
 |---|---|---|---|
 | GET | `/owner/analytics/summary` | 店主 | 本店销售汇总 |
 | GET | `/admin/analytics/summary` | 管理员 | 平台汇总 |
-| GET | `/admin/audits` | 管理员 | 审计日志分页与筛选 |
-| GET | `/admin/database-demo` | 管理员 | 9 项技术的只读演示信息 |
+| GET | `/admin/audit-logs` | 管理员 | 最近 50 条审计日志 |
+| GET | `/admin/database/top-products` | 管理员 | 基于有效销量视图和窗口函数的 Top 10 |
 
 数据库演示接口不允许执行任意 SQL，只返回预定义视图、元数据和实验结果摘要。
 

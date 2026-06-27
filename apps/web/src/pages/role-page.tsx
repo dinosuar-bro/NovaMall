@@ -1,12 +1,17 @@
 import { Link, NavLink } from "react-router-dom";
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import type {
+  Address,
+  AuditLog,
+  Cart,
   Category,
   AdminMerchantApplication,
+  MemberOrder,
   MerchantApplication,
   MerchantApplicationStatus,
   OwnerProduct,
   PublicProduct,
+  ShopOrder,
   ShopSummary
 } from "@novamall/shared";
 
@@ -14,20 +19,33 @@ import { BrandMark } from "../ui/brand-mark.js";
 import { Button } from "../ui/button.js";
 import { StatusMessage } from "../ui/status-message.js";
 import {
+  addCartItem,
   ApiClientError,
   approveMerchantApplication,
+  checkoutCart,
+  confirmShopOrder,
+  createAddress,
   createCategory,
   createOwnerProduct,
   fetchCsrf,
+  getCart,
   getMyMerchantApplication,
   getOwnerShop,
+  listAddresses,
+  listAuditLogs,
   listAdminCategories,
+  listMemberOrders,
+  listMemberShopOrders,
   listOwnerProducts,
+  listOwnerShopOrders,
+  listTopProducts,
   listPublicCategories,
   listPublicProducts,
   listMerchantApplications,
+  payOrder,
   publishOwnerProduct,
   rejectMerchantApplication,
+  shipShopOrder,
   submitMerchantApplication,
   uploadProductImage
 } from "../api/client.js";
@@ -74,11 +92,12 @@ function LegacyRoleNav({ role }: { role: RoleCode }) {
   );
 }
 
-function RoleStageTwoPanel({ role }: RolePageProps) {
+function RoleStageTwoPanel({ role, csrfToken }: RolePageProps) {
   if (role === "MEMBER") {
     return (
       <>
-        <MemberCatalogPanel />
+        <MemberCatalogPanel csrfToken={csrfToken} />
+        <MemberCartOrdersPanel csrfToken={csrfToken} />
         <MemberMerchantApplicationPanel />
       </>
     );
@@ -88,6 +107,7 @@ function RoleStageTwoPanel({ role }: RolePageProps) {
       <>
         <AdminCategoryPanel />
         <AdminMerchantApplicationsPanel />
+        <AdminDatabaseEvidencePanel />
       </>
     );
   }
@@ -95,16 +115,19 @@ function RoleStageTwoPanel({ role }: RolePageProps) {
     <>
       <OwnerShopPanel />
       <OwnerProductPanel />
+      <OwnerOrdersPanel csrfToken={csrfToken} />
     </>
   );
 }
 
-export function MemberCatalogPanel() {
+export function MemberCatalogPanel({ csrfToken: initialCsrfToken = "" }: { csrfToken?: string }) {
+  const [csrfToken, setCsrfToken] = useState(initialCsrfToken);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<PublicProduct[]>([]);
   const [keyword, setKeyword] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [message, setMessage] = useState("正在读取商品目录…");
+  const [addingProductId, setAddingProductId] = useState<string | null>(null);
 
   async function refresh(nextKeyword = keyword, nextCategoryId = categoryId): Promise<void> {
     try {
@@ -126,12 +149,15 @@ export function MemberCatalogPanel() {
 
   useEffect(() => {
     let alive = true;
+    const tokenPromise = initialCsrfToken.length > 0 ? Promise.resolve(initialCsrfToken) : fetchCsrf();
     void Promise.all([
+      tokenPromise,
       listPublicCategories(),
       listPublicProducts({ sort: "newest" })
     ])
-      .then(([nextCategories, productResult]) => {
+      .then(([token, nextCategories, productResult]) => {
         if (alive) {
+          setCsrfToken(token);
           setCategories(nextCategories);
           setProducts(productResult.data);
           setMessage(productResult.meta.total === 0 ? "暂无可展示商品。" : `共 ${productResult.meta.total} 件商品。`);
@@ -145,11 +171,27 @@ export function MemberCatalogPanel() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [initialCsrfToken]);
 
   function submitSearch(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     void refresh(keyword, categoryId);
+  }
+
+  async function addProduct(product: PublicProduct): Promise<void> {
+    if (csrfToken.length === 0) {
+      setMessage("安全令牌未准备好，请稍后再试。");
+      return;
+    }
+    setAddingProductId(product.id);
+    try {
+      await addCartItem({ productId: product.id, quantity: 1 }, csrfToken);
+      setMessage("已加入购物车。");
+    } catch (error) {
+      setMessage(errorMessage(error, "加入购物车失败。"));
+    } finally {
+      setAddingProductId(null);
+    }
   }
 
   return (
@@ -189,7 +231,222 @@ export function MemberCatalogPanel() {
               <span>{product.shop.name}</span>
               <span>{product.category.name}</span>
               <b>¥{product.price}</b>
+              <Button
+                variant="secondary"
+                loading={addingProductId === product.id}
+                onClick={() => { void addProduct(product); }}
+              >
+                加入购物车：{product.name}
+              </Button>
             </div>
+          </article>
+        ))}
+      </div>
+      <StatusMessage>{message}</StatusMessage>
+    </section>
+  );
+}
+
+export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { csrfToken?: string }) {
+  const [csrfToken, setCsrfToken] = useState(initialCsrfToken);
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [cart, setCart] = useState<Cart>({ items: [], totalAmount: "0.00" });
+  const [orders, setOrders] = useState<MemberOrder[]>([]);
+  const [shopOrders, setShopOrders] = useState<ShopOrder[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("正在读取购物车与订单…");
+
+  async function refresh(): Promise<void> {
+    const [nextAddresses, nextCart, nextOrders, nextShopOrders] = await Promise.all([
+      listAddresses(),
+      getCart(),
+      listMemberOrders(),
+      listMemberShopOrders()
+    ]);
+    setAddresses(nextAddresses);
+    setCart(nextCart);
+    setOrders(nextOrders);
+    setShopOrders(nextShopOrders);
+    setSelectedAddressId((current) => current || nextAddresses.find((address) => address.isDefault)?.id || nextAddresses[0]?.id || "");
+    setMessage(nextCart.items.length === 0 ? "购物车为空，可先从商品目录加购。" : `购物车合计 ¥${nextCart.totalAmount}`);
+  }
+
+  useEffect(() => {
+    let alive = true;
+    const tokenPromise = initialCsrfToken.length > 0 ? Promise.resolve(initialCsrfToken) : fetchCsrf();
+    void Promise.all([tokenPromise, listAddresses(), getCart(), listMemberOrders(), listMemberShopOrders()])
+      .then(([token, nextAddresses, nextCart, nextOrders, nextShopOrders]) => {
+        if (alive) {
+          setCsrfToken(token);
+          setAddresses(nextAddresses);
+          setCart(nextCart);
+          setOrders(nextOrders);
+          setShopOrders(nextShopOrders);
+          setSelectedAddressId(nextAddresses.find((address) => address.isDefault)?.id || nextAddresses[0]?.id || "");
+          setMessage(nextCart.items.length === 0 ? "购物车为空，可先从商品目录加购。" : `购物车合计 ¥${nextCart.totalAmount}`);
+        }
+      })
+      .catch((error) => {
+        if (alive) {
+          setMessage(errorMessage(error, "暂时无法读取购物车与订单。"));
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [initialCsrfToken]);
+
+  async function handleAddressSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const input = {
+      receiverName: formValue(formData, "receiverName").trim(),
+      receiverPhone: formValue(formData, "receiverPhone").trim(),
+      province: formValue(formData, "province").trim(),
+      city: formValue(formData, "city").trim(),
+      district: formValue(formData, "district").trim(),
+      detail: formValue(formData, "detail").trim(),
+      isDefault: true
+    };
+    setLoading(true);
+    try {
+      const address = await createAddress(input, csrfToken);
+      setAddresses((current) => [address, ...current.filter((item) => item.id !== address.id)]);
+      setSelectedAddressId(address.id);
+      setMessage("地址已保存。");
+      event.currentTarget.reset();
+    } catch (error) {
+      setMessage(errorMessage(error, "地址保存失败。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitCheckout(): Promise<void> {
+    if (selectedAddressId.length === 0) {
+      setMessage("请先保存或选择收货地址。");
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await checkoutCart({ addressId: selectedAddressId, checkoutToken: newCheckoutToken() }, csrfToken);
+      setMessage(`结算成功，订单 ${result.orderNo} 已创建。`);
+      await refresh();
+    } catch (error) {
+      setMessage(errorMessage(error, "结算失败。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function pay(orderNo: string): Promise<void> {
+    setLoading(true);
+    try {
+      await payOrder(orderNo, csrfToken);
+      setMessage("模拟支付成功。");
+      await refresh();
+    } catch (error) {
+      setMessage(errorMessage(error, "模拟支付失败。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function confirm(shopOrderNo: string): Promise<void> {
+    setLoading(true);
+    try {
+      await confirmShopOrder(shopOrderNo, csrfToken);
+      setMessage("已确认收货。");
+      await refresh();
+    } catch (error) {
+      setMessage(errorMessage(error, "确认收货失败。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section className="stage-panel" aria-labelledby="member-cart-orders-title">
+      <div className="section-heading">
+        <h2 id="member-cart-orders-title">购物车与订单</h2>
+      </div>
+      <form className="form-grid" onSubmit={(event) => { void handleAddressSubmit(event); }}>
+        <label className="field">
+          <span>收货人</span>
+          <input aria-label="收货人" name="receiverName" minLength={2} maxLength={80} required />
+        </label>
+        <label className="field">
+          <span>收货手机号</span>
+          <input aria-label="收货手机号" name="receiverPhone" inputMode="tel" required />
+        </label>
+        <label className="field">
+          <span>省份</span>
+          <input aria-label="省份" name="province" required />
+        </label>
+        <label className="field">
+          <span>城市</span>
+          <input aria-label="城市" name="city" required />
+        </label>
+        <label className="field">
+          <span>区县</span>
+          <input aria-label="区县" name="district" required />
+        </label>
+        <label className="field">
+          <span>详细地址</span>
+          <input aria-label="详细地址" name="detail" required />
+        </label>
+        <Button type="submit" loading={loading} disabled={csrfToken.length === 0}>保存地址</Button>
+      </form>
+      <label className="field filter-control">
+        <span>结算地址</span>
+        <select aria-label="结算地址" value={selectedAddressId} onChange={(event) => { setSelectedAddressId(event.target.value); }}>
+          <option value="">请选择地址</option>
+          {addresses.map((address) => (
+            <option key={address.id} value={address.id}>
+              {address.receiverName} {address.maskedPhone} {address.city}{address.district}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="compact-list">
+        {cart.items.map((item) => (
+          <article className="compact-row compact-row--five" key={item.id}>
+            <strong>{item.productName}</strong>
+            <span>{item.shopName}</span>
+            <span>x {item.quantity}</span>
+            <span>¥{item.lineAmount}</span>
+            <StatusBadge status={item.available ? "AVAILABLE" : "UNAVAILABLE"} />
+          </article>
+        ))}
+      </div>
+      <div className="row-actions">
+        <strong>购物车合计 ¥{cart.totalAmount}</strong>
+        <Button loading={loading} disabled={csrfToken.length === 0 || cart.items.length === 0} onClick={() => { void submitCheckout(); }}>提交结算</Button>
+      </div>
+      <div className="compact-list">
+        {orders.map((order) => (
+          <article className="compact-row compact-row--five" key={order.orderNo}>
+            <strong>{order.orderNo}</strong>
+            <span>¥{order.totalAmount}</span>
+            <span>{order.shopOrderCount} 个子订单</span>
+            <StatusBadge status={order.status} />
+            {order.status === "PENDING_PAYMENT" ? (
+              <Button variant="secondary" loading={loading} onClick={() => { void pay(order.orderNo); }}>模拟支付：{order.orderNo}</Button>
+            ) : null}
+          </article>
+        ))}
+      </div>
+      <div className="compact-list">
+        {shopOrders.map((shopOrder) => (
+          <article className="compact-row compact-row--five" key={shopOrder.shopOrderNo}>
+            <strong>{shopOrder.shopOrderNo}</strong>
+            <span>{shopOrder.masterOrderNo}</span>
+            <span>¥{shopOrder.subtotalAmount}</span>
+            <StatusBadge status={shopOrder.status} />
+            {shopOrder.status === "SHIPPED" ? (
+              <Button variant="secondary" loading={loading} onClick={() => { void confirm(shopOrder.shopOrderNo); }}>确认收货：{shopOrder.shopOrderNo}</Button>
+            ) : null}
           </article>
         ))}
       </div>
@@ -723,11 +980,152 @@ export function OwnerProductPanel() {
   );
 }
 
-function StatusBadge({ status }: { status: MerchantApplication["status"] | ShopSummary["status"] | Category["status"] | OwnerProduct["status"] }) {
+export function OwnerOrdersPanel({ csrfToken: initialCsrfToken = "" }: { csrfToken?: string }) {
+  const [csrfToken, setCsrfToken] = useState(initialCsrfToken);
+  const [orders, setOrders] = useState<ShopOrder[]>([]);
+  const [loadingOrderNo, setLoadingOrderNo] = useState<string | null>(null);
+  const [message, setMessage] = useState("正在读取子订单…");
+
+  async function refresh(): Promise<void> {
+    const nextOrders = await listOwnerShopOrders();
+    setOrders(nextOrders);
+    setMessage(nextOrders.length === 0 ? "暂无子订单。" : `共 ${nextOrders.length} 个子订单。`);
+  }
+
+  useEffect(() => {
+    let alive = true;
+    const tokenPromise = initialCsrfToken.length > 0 ? Promise.resolve(initialCsrfToken) : fetchCsrf();
+    void Promise.all([tokenPromise, listOwnerShopOrders()])
+      .then(([token, nextOrders]) => {
+        if (alive) {
+          setCsrfToken(token);
+          setOrders(nextOrders);
+          setMessage(nextOrders.length === 0 ? "暂无子订单。" : `共 ${nextOrders.length} 个子订单。`);
+        }
+      })
+      .catch((error) => {
+        if (alive) {
+          setMessage(errorMessage(error, "暂时无法读取子订单。"));
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [initialCsrfToken]);
+
+  async function ship(shopOrderNo: string): Promise<void> {
+    setLoadingOrderNo(shopOrderNo);
+    try {
+      await shipShopOrder(shopOrderNo, csrfToken);
+      setMessage("子订单已发货。");
+      await refresh();
+    } catch (error) {
+      setMessage(errorMessage(error, "发货失败。"));
+    } finally {
+      setLoadingOrderNo(null);
+    }
+  }
+
+  return (
+    <section className="stage-panel" aria-labelledby="owner-orders-title">
+      <div className="section-heading">
+        <h2 id="owner-orders-title">订单履约</h2>
+      </div>
+      <div className="compact-list">
+        {orders.map((order) => (
+          <article className="compact-row compact-row--five" key={order.shopOrderNo}>
+            <strong>{order.shopOrderNo}</strong>
+            <span>{order.masterOrderNo}</span>
+            <span>¥{order.subtotalAmount}</span>
+            <StatusBadge status={order.status} />
+            {order.status === "PENDING_SHIPMENT" ? (
+              <Button
+                variant="secondary"
+                loading={loadingOrderNo === order.shopOrderNo}
+                disabled={csrfToken.length === 0}
+                onClick={() => { void ship(order.shopOrderNo); }}
+              >
+                发货：{order.shopOrderNo}
+              </Button>
+            ) : null}
+          </article>
+        ))}
+      </div>
+      <StatusMessage>{message}</StatusMessage>
+    </section>
+  );
+}
+
+export function AdminDatabaseEvidencePanel() {
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [topProducts, setTopProducts] = useState<Awaited<ReturnType<typeof listTopProducts>>>([]);
+  const [message, setMessage] = useState("正在读取数据库证据…");
+
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([listAuditLogs(), listTopProducts()])
+      .then(([nextAuditLogs, nextTopProducts]) => {
+        if (alive) {
+          setAuditLogs(nextAuditLogs);
+          setTopProducts(nextTopProducts);
+          setMessage("数据库证据已同步。");
+        }
+      })
+      .catch((error) => {
+        if (alive) {
+          setMessage(errorMessage(error, "暂时无法读取数据库证据。"));
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return (
+    <section className="stage-panel" aria-labelledby="admin-database-title">
+      <div className="section-heading">
+        <h2 id="admin-database-title">数据库证据</h2>
+      </div>
+      <div className="evidence-grid">
+        <section aria-labelledby="audit-log-title">
+          <h3 id="audit-log-title">审计日志</h3>
+          <div className="compact-list">
+            {auditLogs.map((log) => (
+              <article className="compact-row compact-row--five" key={log.id}>
+                <strong>{log.tableName}</strong>
+                <span>{log.action}</span>
+                <span>{log.recordId}</span>
+                <span>{log.actorUserId ?? "系统"}</span>
+                <span>{formatDisplayDate(log.createdAt)}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+        <section aria-labelledby="top-product-title">
+          <h3 id="top-product-title">有效销量 Top 10</h3>
+          <div className="compact-list">
+            {topProducts.map((product) => (
+              <article className="compact-row compact-row--five" key={product.productId}>
+                <strong>{product.productName}</strong>
+                <span>第 {product.salesRank} 名</span>
+                <span>{product.soldQuantity} 件</span>
+                <span>¥{product.salesAmount}</span>
+                <span>窗口函数</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+      <StatusMessage>{message}</StatusMessage>
+    </section>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
   return <span className="status-badge">{statusLabel(status)}</span>;
 }
 
-function statusLabel(status: MerchantApplication["status"] | ShopSummary["status"] | Category["status"] | OwnerProduct["status"]): string {
+function statusLabel(status: string): string {
   if (status === "PENDING") {
     return "等待管理员审核";
   }
@@ -755,7 +1153,45 @@ function statusLabel(status: MerchantApplication["status"] | ShopSummary["status
   if (status === "ARCHIVED") {
     return "已归档";
   }
+  if (status === "AVAILABLE") {
+    return "可结算";
+  }
+  if (status === "UNAVAILABLE") {
+    return "不可结算";
+  }
+  if (status === "PENDING_PAYMENT") {
+    return "待支付";
+  }
+  if (status === "PAID") {
+    return "已支付";
+  }
+  if (status === "PENDING_SHIPMENT") {
+    return "待发货";
+  }
+  if (status === "SHIPPED") {
+    return "已发货";
+  }
+  if (status === "COMPLETED") {
+    return "已完成";
+  }
+  if (status === "CANCELED") {
+    return "已取消";
+  }
+  if (status === "REFUNDED") {
+    return "已退款";
+  }
   return "已暂停";
+}
+
+function newCheckoutToken(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return "00000000-0000-4000-8000-000000000000";
+}
+
+function formatDisplayDate(value: string): string {
+  return new Date(value).toLocaleString("zh-CN", { hour12: false });
 }
 
 function errorMessage(error: unknown, fallback: string): string {

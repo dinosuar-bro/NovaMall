@@ -145,7 +145,7 @@
 
 ### 文档先行
 
-创建 `docs/phases/05-minimal-demo-flow.md`，确认最终演示只覆盖必要页面、API 和状态，不扩展完整订单售后系统。
+已创建 `docs/phases/05-minimal-demo-flow.md`，确认最终演示只覆盖必要页面、API 和状态，不扩展完整订单售后系统。
 
 ### 实现
 
@@ -153,6 +153,7 @@
 - 店主子订单列表和发货按钮；
 - 会员确认收货按钮；
 - 管理员只读查看审计日志、Top 10 和数据库技术证据入口；
+- 后端新增 `/owner/shop-orders/:shopOrderNo/ship`、`/member/shop-orders/:shopOrderNo/confirm` 和 `/member/shop-orders`，用于最小履约主线；
 - 简单取消或退款只保留数据库验收需要的最小 API/测试路径，不做完整售后页面；
 - 演示数据种子覆盖管理员、会员、两个店主、分类、商品、跨店订单和数据库证据查询。
 

@@ -76,6 +76,14 @@ export class CheckoutController {
     }
   };
 
+  listMemberShopOrders: RequestHandler = async (request, response, next) => {
+    try {
+      response.json({ success: true, data: await this.service.listMemberShopOrders(currentUserId(request)) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   payOrder: RequestHandler = async (request, response, next) => {
     try {
       response.json({
@@ -98,9 +106,39 @@ export class CheckoutController {
     }
   };
 
+  confirmShopOrder: RequestHandler = async (request, response, next) => {
+    try {
+      response.json({
+        success: true,
+        data: await this.service.confirmShopOrder(
+          currentUserId(request),
+          pathParam(request.params.shopOrderNo),
+          request.requestId
+        )
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   listOwnerShopOrders: RequestHandler = async (request, response, next) => {
     try {
       response.json({ success: true, data: await this.service.listOwnerShopOrders(currentUserId(request)) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  shipShopOrder: RequestHandler = async (request, response, next) => {
+    try {
+      response.json({
+        success: true,
+        data: await this.service.shipShopOrder(
+          currentUserId(request),
+          pathParam(request.params.shopOrderNo),
+          request.requestId
+        )
+      });
     } catch (error) {
       next(error);
     }

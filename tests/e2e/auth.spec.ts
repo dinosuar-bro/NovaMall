@@ -139,6 +139,44 @@ test("管理员创建分类，店主发布带图商品，会员可搜索查看",
   const publicProductCard = page.locator(".product-card").filter({ hasText: productName });
   await expect(publicProductCard).toBeVisible();
   await expect(publicProductCard.getByText("¥19.90")).toBeVisible();
+
+  await publicProductCard.getByRole("button", { name: `加入购物车：${productName}` }).click();
+  await expect(page.locator(".status-message").filter({ hasText: "已加入购物车" })).toBeVisible();
+  await page.getByRole("link", { name: "购物车与订单" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "购物车与订单" })).toBeVisible();
+  await page.getByLabel("收货人").fill("张三");
+  await page.getByLabel("收货手机号").fill("13900000000");
+  await page.getByLabel("省份").fill("广东省");
+  await page.getByLabel("城市").fill("深圳市");
+  await page.getByLabel("区县").fill("南山区");
+  await page.getByLabel("详细地址").fill("科技园 1 号");
+  await page.getByRole("button", { name: "保存地址" }).click();
+  await expect(page.locator(".status-message").filter({ hasText: "地址已保存" })).toBeVisible();
+  await page.getByRole("button", { name: "提交结算" }).click();
+  await expect(page.locator(".status-message").filter({ hasText: "结算成功" })).toBeVisible();
+  await page.getByRole("button", { name: /^模拟支付：/ }).click();
+  await expect(page.locator(".status-message").filter({ hasText: "模拟支付成功" })).toBeVisible();
+
+  await page.context().clearCookies();
+  await login(page, "demo_owner");
+  await page.getByRole("link", { name: "订单履约" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "订单履约" })).toBeVisible();
+  await page.getByRole("button", { name: /^发货：/ }).click();
+  await expect(page.locator(".status-message").filter({ hasText: "子订单已发货" })).toBeVisible();
+
+  await page.context().clearCookies();
+  await login(page, username);
+  await page.getByRole("link", { name: "购物车与订单" }).click();
+  await expect(page.getByRole("button", { name: /^确认收货：/ })).toBeVisible();
+  await page.getByRole("button", { name: /^确认收货：/ }).click();
+  await expect(page.locator(".status-message").filter({ hasText: "已确认收货" })).toBeVisible();
+
+  await page.context().clearCookies();
+  await login(page, "demo_admin");
+  await page.getByRole("link", { name: "数据库证据" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "数据库证据" })).toBeVisible();
+  await expect(page.getByText(productName)).toBeVisible();
+  await expect(page.getByText("shop_orders").first()).toBeVisible();
 });
 
 async function login(page: Page, username: string): Promise<void> {
