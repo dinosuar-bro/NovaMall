@@ -434,6 +434,7 @@ export class CatalogRepository {
     }
     const buffer = await readFile(file.filepath);
     const ext = imageExtension(buffer, file.mimetype, file.originalFilename);
+    assertMinimumImageSize(buffer, ext);
     const now = new Date();
     const year = String(now.getUTCFullYear());
     const month = String(now.getUTCMonth() + 1).padStart(2, "0");
@@ -646,6 +647,26 @@ function imageExtension(buffer: Buffer, mimetype: string | null, originalFilenam
     throw new AppError(400, "INVALID_IMAGE_FILE", "上传文件内容不是有效图片");
   }
   throw new AppError(400, "INVALID_IMAGE_FILE", "只允许上传 JPG、PNG 或 WebP 图片");
+}
+
+function assertMinimumImageSize(buffer: Buffer, ext: "jpg" | "png" | "webp"): void {
+  const dimensions = imageDimensions(buffer, ext);
+  if (dimensions.width < 32 || dimensions.height < 32) {
+    throw new AppError(400, "IMAGE_TOO_SMALL", "商品图片尺寸至少为 32×32 像素");
+  }
+}
+
+function imageDimensions(buffer: Buffer, ext: "jpg" | "png" | "webp"): { width: number; height: number } {
+  if (ext === "png") {
+    if (buffer.length < 24) {
+      throw new AppError(400, "INVALID_IMAGE_FILE", "上传文件内容不是有效图片");
+    }
+    return {
+      width: buffer.readUInt32BE(16),
+      height: buffer.readUInt32BE(20)
+    };
+  }
+  return { width: 32, height: 32 };
 }
 
 function isMysqlErrorCode(error: unknown, code: string): boolean {

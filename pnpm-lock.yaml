@@ -99,6 +99,9 @@ importers:
       gsap:
         specifier: ^3.15.0
         version: 3.15.0
+      province-city-china:
+        specifier: 8.5.8
+        version: 8.5.8
       react:
         specifier: ^19.2.7
         version: 19.2.7
@@ -575,6 +578,9 @@ packages:
     resolution: {integrity: sha512-cKA5B6lpFEMyMGjxF54QihfYpB4FkEGH+qZhtArDEG+wezQAJY8Pq6C7T1SjWz+FFzt3TbyoXBQYk/0292TdJA==}
     engines: {node: '>=18'}
     hasBin: true
+
+  '@province-city-china/types@8.5.8':
+    resolution: {integrity: sha512-KZ3NyM8HsaBVcn5BRhWaOeZRhqEvm18PfB6HfRDuZfwwWhJLoTxB81mTENrBlONr2g8fy/fSbjsh44gvOj+/Lw==}
 
   '@rolldown/binding-android-arm64@1.0.3':
     resolution: {integrity: sha512-454rs7jHngixp/NMxd5srYD57OnzSlZ/eFTETjORQHLwJG1lRtmNOJcBerZlfu4GjKqeq8aCCIQrMdHyhI51Hw==}
@@ -1679,6 +1685,9 @@ packages:
     resolution: {integrity: sha512-Qb1gy5OrP5+zDf2Bvnzdl3jsTf1qXVMazbvCoKhtKqVs4/YK4ozX4gKQJJVyNe+cajNPn0KoC0MC3FUmaHWEmQ==}
     engines: {node: ^10.13.0 || ^12.13.0 || ^14.15.0 || >=15.0.0}
 
+  province-city-china@8.5.8:
+    resolution: {integrity: sha512-gUV5kSOWHVufemkq6lygb0ngNZ4snMcONmr3QzxHuj1MYOQPphiyjHplfmywcVGWdGQgim30RXia/mYB007eLg==}
+
   proxy-addr@2.0.7:
     resolution: {integrity: sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==}
     engines: {node: '>= 0.10'}
@@ -2446,6 +2455,8 @@ snapshots:
   '@playwright/test@1.61.0':
     dependencies:
       playwright: 1.61.0
+
+  '@province-city-china/types@8.5.8': {}
 
   '@rolldown/binding-android-arm64@1.0.3':
     optional: true
@@ -3537,6 +3548,10 @@ snapshots:
       ansi-regex: 5.0.1
       ansi-styles: 5.2.0
       react-is: 17.0.2
+
+  province-city-china@8.5.8:
+    dependencies:
+      '@province-city-china/types': 8.5.8
 
   proxy-addr@2.0.7:
     dependencies:

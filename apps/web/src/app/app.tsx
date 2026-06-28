@@ -142,7 +142,6 @@ export function RoleNav({ role }: { role: RoleCode }) {
         <>
           <NavLink to="/member/catalog">商品目录</NavLink>
           <NavLink to="/member/orders">购物车与订单</NavLink>
-          <NavLink to="/member/applications">开店申请</NavLink>
         </>
       ) : null}
       {role === "OWNER" ? (
@@ -199,6 +198,7 @@ function AppShell({ session, title, children }: { session: AuthSessionData; titl
             {menuOpen ? (
               <div className="profile-menu__panel" role="menu">
                 <NavLink role="menuitem" to="/profile">个人主页</NavLink>
+                {primaryRole === "MEMBER" ? <NavLink role="menuitem" to="/member/applications">申请开店</NavLink> : null}
                 <button role="menuitem" type="button" onClick={() => { void handleLogout(); }}>退出登录</button>
               </div>
             ) : null}

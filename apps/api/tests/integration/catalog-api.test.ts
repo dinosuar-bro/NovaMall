@@ -20,6 +20,10 @@ const tinyPng = Buffer.from(
   "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000100ffff03000006000557bfab6d0000000049454e44ae426082",
   "hex"
 );
+const productPng = Buffer.from(
+  "89504e470d0a1a0a0000000d4948445200000040000000400802000000250be689000000514944415478daedcf310d0030080030984094201c1953c141d23a684e575cf6e238010101010101010101010101010101010101010101010101010101010101010101010101010101010101817d1f0b6b022205488aab0000000049454e44ae426082",
+  "hex"
+);
 
 const pool = createPoolFromEnv({ DATABASE_URL: databaseUrl });
 const authRepository = new AuthRepository(pool, phoneAesKey);
@@ -293,10 +297,18 @@ describe("商品目录 API", () => {
     await agent
       .post("/api/v1/uploads/products")
       .set("X-CSRF-Token", csrfToken)
-      .attach("image", tinyPng, { filename: "tiny.png", contentType: "image/png" })
+      .attach("image", productPng, { filename: "product.png", contentType: "image/png" })
       .expect(200)
       .expect((response) => {
         expect(readStringPath(response.body, ["data", "path"])).toMatch(/^\/uploads\/products\/\d{4}\/\d{2}\/.+\.png$/);
+      });
+    await agent
+      .post("/api/v1/uploads/products")
+      .set("X-CSRF-Token", csrfToken)
+      .attach("image", tinyPng, { filename: "tiny.png", contentType: "image/png" })
+      .expect(400)
+      .expect((response) => {
+        expect(errorResponseSchema.parse(response.body).error.code).toBe("IMAGE_TOO_SMALL");
       });
     await agent
       .post("/api/v1/uploads/products")

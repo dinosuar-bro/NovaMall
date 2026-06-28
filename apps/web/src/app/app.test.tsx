@@ -9,6 +9,7 @@ import {
   getCurrentSession,
   getMyMerchantApplication,
   getPrivateProfile,
+  getOwnerShop,
   listAddresses,
   listAuditLogs,
   listMemberOrders,
@@ -71,6 +72,7 @@ const mockedFetchCsrf = vi.mocked(fetchCsrf);
 const mockedGetCart = vi.mocked(getCart);
 const mockedGetCurrentSession = vi.mocked(getCurrentSession);
 const mockedGetMyMerchantApplication = vi.mocked(getMyMerchantApplication);
+const mockedGetOwnerShop = vi.mocked(getOwnerShop);
 const mockedGetPrivateProfile = vi.mocked(getPrivateProfile);
 const mockedListAddresses = vi.mocked(listAddresses);
 const mockedListAuditLogs = vi.mocked(listAuditLogs);
@@ -91,6 +93,12 @@ describe("App 路由守卫", () => {
     mockedFetchCsrf.mockResolvedValue("csrf-token");
     mockedGetCart.mockResolvedValue({ items: [], totalAmount: "0.00" });
     mockedGetMyMerchantApplication.mockResolvedValue(null);
+    mockedGetOwnerShop.mockResolvedValue({
+      id: "3",
+      name: "星选烘焙铺",
+      description: "主营社区烘焙和礼盒",
+      status: "ACTIVE"
+    });
     mockedGetPrivateProfile.mockResolvedValue({
       id: "1",
       username: "member01",
@@ -213,6 +221,65 @@ describe("App 路由守卫", () => {
     });
   });
 
+  it("注册提交前会去除用户名和手机号两端空白", async () => {
+    mockedRegister.mockResolvedValue({
+      user: {
+        id: "1",
+        username: "member01",
+        displayName: "新会员123456",
+        roles: ["MEMBER"]
+      },
+      csrfToken: "rotated-token"
+    });
+
+    renderApp("/register");
+    await screen.findByText("安全会话已准备好。");
+    fireFormInput("用户名", " member01 ");
+    fireFormInput("手机号", " 13800138000 ");
+    fireFormInput("密码", "Password123");
+    fireFormInput("确认密码", "Password123");
+    fireEvent.click(screen.getByRole("button", { name: "注册并进入会员首页" }));
+
+    await waitFor(() => {
+      expect(mockedRegister).toHaveBeenCalledWith({
+        username: "member01",
+        phone: "13800138000",
+        password: "Password123"
+      }, "csrf-token");
+    });
+  });
+
+  it("注册成功后进入会员商品目录", async () => {
+    mockedRegister.mockResolvedValue({
+      user: {
+        id: "1",
+        username: "member01",
+        displayName: "新会员123456",
+        roles: ["MEMBER"]
+      },
+      csrfToken: "rotated-token"
+    });
+    mockedGetCurrentSession.mockResolvedValue({
+      user: {
+        id: "1",
+        username: "member01",
+        displayName: "新会员123456",
+        roles: ["MEMBER"]
+      },
+      csrfToken: "rotated-token"
+    });
+
+    renderApp("/register");
+    await screen.findByText("安全会话已准备好。");
+    fireFormInput("用户名", "member01");
+    fireFormInput("手机号", "13800138000");
+    fireFormInput("密码", "Password123");
+    fireFormInput("确认密码", "Password123");
+    fireEvent.click(screen.getByRole("button", { name: "注册并进入会员首页" }));
+
+    expect(await screen.findByRole("heading", { level: 2, name: "商品目录" })).toBeInTheDocument();
+  });
+
   it("注册页要求两次密码一致且密码包含大小写和数字", async () => {
     renderApp("/register");
     await screen.findByText("安全会话已准备好。");
@@ -267,7 +334,7 @@ describe("App 路由守卫", () => {
     expect(screen.queryByText("两次输入的密码不一致。")).not.toBeInTheDocument();
   });
 
-  it("侧边栏切换到独立功能路由", async () => {
+  it("会员开店申请入口在头像菜单中，不出现在左侧导航", async () => {
     mockedGetCurrentSession.mockResolvedValue({
       user: {
         id: "1",
@@ -280,7 +347,9 @@ describe("App 路由守卫", () => {
 
     renderApp("/member/catalog");
     expect(await screen.findByRole("heading", { level: 2, name: "商品目录" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("link", { name: "开店申请" }));
+    expect(screen.queryByRole("link", { name: "开店申请" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "会员一" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "申请开店" }));
 
     expect(await screen.findByRole("heading", { level: 2, name: "开店申请" })).toBeInTheDocument();
   });
@@ -330,7 +399,7 @@ describe("App 路由守卫", () => {
     expect(await screen.findByRole("link", { name: "数据库证据" })).toBeInTheDocument();
   });
 
-  it("头像菜单仅提供个人主页和退出登录", async () => {
+  it("头像菜单提供个人主页、会员申请入口和退出登录", async () => {
     mockedGetCurrentSession.mockResolvedValue({
       user: {
         id: "1",

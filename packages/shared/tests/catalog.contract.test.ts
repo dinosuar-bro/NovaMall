@@ -79,5 +79,6 @@ describe("商品目录合同", () => {
     expect(apiErrorCodeSchema.parse("PRODUCT_VERSION_CONFLICT")).toBe("PRODUCT_VERSION_CONFLICT");
     expect(apiErrorCodeSchema.parse("INVALID_IMAGE_FILE")).toBe("INVALID_IMAGE_FILE");
     expect(apiErrorCodeSchema.parse("IMAGE_TOO_LARGE")).toBe("IMAGE_TOO_LARGE");
+    expect(apiErrorCodeSchema.parse("IMAGE_TOO_SMALL")).toBe("IMAGE_TOO_SMALL");
   });
 });

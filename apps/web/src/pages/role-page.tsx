@@ -18,6 +18,7 @@ import type {
 import { BrandMark } from "../ui/brand-mark.js";
 import { Button } from "../ui/button.js";
 import { StatusMessage } from "../ui/status-message.js";
+import { defaultRegion, listCities, listDistricts, listProvinces } from "../data/regions.js";
 import {
   addCartItem,
   ApiClientError,
@@ -31,6 +32,7 @@ import {
   getCart,
   getMyMerchantApplication,
   getOwnerShop,
+  getPrivateProfile,
   listAddresses,
   listAuditLogs,
   listAdminCategories,
@@ -98,7 +100,6 @@ function RoleStageTwoPanel({ role, csrfToken }: RolePageProps) {
       <>
         <MemberCatalogPanel csrfToken={csrfToken} />
         <MemberCartOrdersPanel csrfToken={csrfToken} />
-        <MemberMerchantApplicationPanel />
       </>
     );
   }
@@ -220,8 +221,11 @@ export function MemberCatalogPanel({ csrfToken: initialCsrfToken = "" }: { csrfT
               src={productImageSrc(product.mainImagePath)}
               alt={product.name}
               onError={(event) => {
-                if (!event.currentTarget.src.endsWith(productPlaceholderSrc)) {
-                  event.currentTarget.src = productPlaceholderSrc;
+                replaceWithProductPlaceholder(event.currentTarget);
+              }}
+              onLoad={(event) => {
+                if (isTinyProductImage(event.currentTarget)) {
+                  replaceWithProductPlaceholder(event.currentTarget);
                 }
               }}
             />
@@ -248,16 +252,24 @@ export function MemberCatalogPanel({ csrfToken: initialCsrfToken = "" }: { csrfT
 }
 
 export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { csrfToken?: string }) {
+  const initialRegion = defaultRegion();
   const [csrfToken, setCsrfToken] = useState(initialCsrfToken);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [cart, setCart] = useState<Cart>({ items: [], totalAmount: "0.00" });
   const [orders, setOrders] = useState<MemberOrder[]>([]);
   const [shopOrders, setShopOrders] = useState<ShopOrder[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [receiverPhone, setReceiverPhone] = useState("");
+  const [selectedProvince, setSelectedProvince] = useState(initialRegion.province);
+  const [selectedCity, setSelectedCity] = useState(initialRegion.city);
+  const [selectedDistrict, setSelectedDistrict] = useState(initialRegion.district);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("正在读取购物车与订单…");
+  const provinceOptions = listProvinces();
+  const cityOptions = listCities(selectedProvince);
+  const districtOptions = listDistricts(selectedProvince, selectedCity);
 
-  async function refresh(): Promise<void> {
+  async function refresh(successMessage?: string): Promise<void> {
     const [nextAddresses, nextCart, nextOrders, nextShopOrders] = await Promise.all([
       listAddresses(),
       getCart(),
@@ -269,16 +281,17 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
     setOrders(nextOrders);
     setShopOrders(nextShopOrders);
     setSelectedAddressId((current) => current || nextAddresses.find((address) => address.isDefault)?.id || nextAddresses[0]?.id || "");
-    setMessage(nextCart.items.length === 0 ? "购物车为空，可先从商品目录加购。" : `购物车合计 ¥${nextCart.totalAmount}`);
+    setMessage(successMessage ?? (nextCart.items.length === 0 ? "购物车为空，可先从商品目录加购。" : `购物车合计 ¥${nextCart.totalAmount}`));
   }
 
   useEffect(() => {
     let alive = true;
     const tokenPromise = initialCsrfToken.length > 0 ? Promise.resolve(initialCsrfToken) : fetchCsrf();
-    void Promise.all([tokenPromise, listAddresses(), getCart(), listMemberOrders(), listMemberShopOrders()])
-      .then(([token, nextAddresses, nextCart, nextOrders, nextShopOrders]) => {
+    void Promise.all([tokenPromise, getPrivateProfile(), listAddresses(), getCart(), listMemberOrders(), listMemberShopOrders()])
+      .then(([token, profile, nextAddresses, nextCart, nextOrders, nextShopOrders]) => {
         if (alive) {
           setCsrfToken(token);
+          setReceiverPhone(profile.phone);
           setAddresses(nextAddresses);
           setCart(nextCart);
           setOrders(nextOrders);
@@ -299,13 +312,14 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
 
   async function handleAddressSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     const input = {
       receiverName: formValue(formData, "receiverName").trim(),
-      receiverPhone: formValue(formData, "receiverPhone").trim(),
-      province: formValue(formData, "province").trim(),
-      city: formValue(formData, "city").trim(),
-      district: formValue(formData, "district").trim(),
+      receiverPhone: receiverPhone.trim(),
+      province: selectedProvince,
+      city: selectedCity,
+      district: selectedDistrict,
       detail: formValue(formData, "detail").trim(),
       isDefault: true
     };
@@ -315,7 +329,7 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
       setAddresses((current) => [address, ...current.filter((item) => item.id !== address.id)]);
       setSelectedAddressId(address.id);
       setMessage("地址已保存。");
-      event.currentTarget.reset();
+      form.reset();
     } catch (error) {
       setMessage(errorMessage(error, "地址保存失败。"));
     } finally {
@@ -331,8 +345,7 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
     setLoading(true);
     try {
       const result = await checkoutCart({ addressId: selectedAddressId, checkoutToken: newCheckoutToken() }, csrfToken);
-      setMessage(`结算成功，订单 ${result.orderNo} 已创建。`);
-      await refresh();
+      await refresh(`结算成功，订单 ${displayOrderCode("主订单", result.orderNo)} 已创建。`);
     } catch (error) {
       setMessage(errorMessage(error, "结算失败。"));
     } finally {
@@ -344,8 +357,7 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
     setLoading(true);
     try {
       await payOrder(orderNo, csrfToken);
-      setMessage("模拟支付成功。");
-      await refresh();
+      await refresh("模拟支付成功。");
     } catch (error) {
       setMessage(errorMessage(error, "模拟支付失败。"));
     } finally {
@@ -357,8 +369,7 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
     setLoading(true);
     try {
       await confirmShopOrder(shopOrderNo, csrfToken);
-      setMessage("已确认收货。");
-      await refresh();
+      await refresh("已确认收货。");
     } catch (error) {
       setMessage(errorMessage(error, "确认收货失败。"));
     } finally {
@@ -378,19 +389,61 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
         </label>
         <label className="field">
           <span>收货手机号</span>
-          <input aria-label="收货手机号" name="receiverPhone" inputMode="tel" required />
+          <input
+            aria-label="收货手机号"
+            name="receiverPhone"
+            inputMode="tel"
+            value={receiverPhone}
+            onChange={(event) => { setReceiverPhone(event.target.value); }}
+            required
+          />
         </label>
         <label className="field">
           <span>省份</span>
-          <input aria-label="省份" name="province" required />
+          <select
+            aria-label="省份"
+            name="province"
+            value={selectedProvince}
+            onChange={(event) => {
+              const nextProvince = event.target.value;
+              const nextCity = listCities(nextProvince)[0]?.name ?? "";
+              const nextDistrict = listDistricts(nextProvince, nextCity)[0]?.name ?? "";
+              setSelectedProvince(nextProvince);
+              setSelectedCity(nextCity);
+              setSelectedDistrict(nextDistrict);
+            }}
+            required
+          >
+            {provinceOptions.map((province) => <option key={province.code} value={province.name}>{province.name}</option>)}
+          </select>
         </label>
         <label className="field">
           <span>城市</span>
-          <input aria-label="城市" name="city" required />
+          <select
+            aria-label="城市"
+            name="city"
+            value={selectedCity}
+            onChange={(event) => {
+              const nextCity = event.target.value;
+              setSelectedCity(nextCity);
+              setSelectedDistrict(listDistricts(selectedProvince, nextCity)[0]?.name ?? "");
+            }}
+            required
+          >
+            {cityOptions.map((city) => <option key={city.code} value={city.name}>{city.name}</option>)}
+          </select>
         </label>
         <label className="field">
           <span>区县</span>
-          <input aria-label="区县" name="district" required />
+          <select
+            aria-label="区县"
+            name="district"
+            value={selectedDistrict}
+            onChange={(event) => { setSelectedDistrict(event.target.value); }}
+            required
+          >
+            {districtOptions.map((district) => <option key={district.code} value={district.name}>{district.name}</option>)}
+          </select>
         </label>
         <label className="field">
           <span>详细地址</span>
@@ -426,26 +479,26 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
       </div>
       <div className="compact-list">
         {orders.map((order) => (
-          <article className="compact-row compact-row--five" key={order.orderNo}>
-            <strong>{order.orderNo}</strong>
+          <article className="compact-row compact-row--five order-row" key={order.orderNo}>
+            <strong title={order.orderNo}>{displayOrderCode("主订单", order.orderNo)}</strong>
             <span>¥{order.totalAmount}</span>
             <span>{order.shopOrderCount} 个子订单</span>
             <StatusBadge status={order.status} />
             {order.status === "PENDING_PAYMENT" ? (
-              <Button variant="secondary" loading={loading} onClick={() => { void pay(order.orderNo); }}>模拟支付：{order.orderNo}</Button>
+              <Button variant="secondary" loading={loading} onClick={() => { void pay(order.orderNo); }}>去支付</Button>
             ) : null}
           </article>
         ))}
       </div>
       <div className="compact-list">
         {shopOrders.map((shopOrder) => (
-          <article className="compact-row compact-row--five" key={shopOrder.shopOrderNo}>
-            <strong>{shopOrder.shopOrderNo}</strong>
-            <span>{shopOrder.masterOrderNo}</span>
+          <article className="compact-row compact-row--five order-row" key={shopOrder.shopOrderNo}>
+            <strong title={shopOrder.shopOrderNo}>{displayOrderCode("子订单", shopOrder.shopOrderNo)}</strong>
+            <span title={shopOrder.masterOrderNo}>{displayOrderCode("所属主订单", shopOrder.masterOrderNo)}</span>
             <span>¥{shopOrder.subtotalAmount}</span>
             <StatusBadge status={shopOrder.status} />
             {shopOrder.status === "SHIPPED" ? (
-              <Button variant="secondary" loading={loading} onClick={() => { void confirm(shopOrder.shopOrderNo); }}>确认收货：{shopOrder.shopOrderNo}</Button>
+              <Button variant="secondary" loading={loading} onClick={() => { void confirm(shopOrder.shopOrderNo); }}>确认收货</Button>
             ) : null}
           </article>
         ))}
@@ -455,7 +508,8 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
   );
 }
 
-const productPlaceholderSrc = "/product-placeholder.svg";
+const productPlaceholderSrc = "/product-placeholder.png";
+const minimumProductImageSide = 32;
 
 function productImageSrc(path: string | null): string | undefined {
   if (path === null) {
@@ -465,6 +519,20 @@ function productImageSrc(path: string | null): string | undefined {
     return `/api/v1${path}`;
   }
   return path;
+}
+
+function replaceWithProductPlaceholder(image: HTMLImageElement): void {
+  if (!image.src.endsWith(productPlaceholderSrc)) {
+    image.src = productPlaceholderSrc;
+  }
+}
+
+function isTinyProductImage(image: HTMLImageElement): boolean {
+  return !image.src.endsWith(productPlaceholderSrc)
+    && image.complete
+    && image.naturalWidth > 0
+    && image.naturalHeight > 0
+    && (image.naturalWidth < minimumProductImageSide || image.naturalHeight < minimumProductImageSide);
 }
 
 export function MemberMerchantApplicationPanel() {
@@ -986,10 +1054,10 @@ export function OwnerOrdersPanel({ csrfToken: initialCsrfToken = "" }: { csrfTok
   const [loadingOrderNo, setLoadingOrderNo] = useState<string | null>(null);
   const [message, setMessage] = useState("正在读取子订单…");
 
-  async function refresh(): Promise<void> {
+  async function refresh(successMessage?: string): Promise<void> {
     const nextOrders = await listOwnerShopOrders();
     setOrders(nextOrders);
-    setMessage(nextOrders.length === 0 ? "暂无子订单。" : `共 ${nextOrders.length} 个子订单。`);
+    setMessage(successMessage ?? (nextOrders.length === 0 ? "暂无子订单。" : `共 ${nextOrders.length} 个子订单。`));
   }
 
   useEffect(() => {
@@ -1017,8 +1085,7 @@ export function OwnerOrdersPanel({ csrfToken: initialCsrfToken = "" }: { csrfTok
     setLoadingOrderNo(shopOrderNo);
     try {
       await shipShopOrder(shopOrderNo, csrfToken);
-      setMessage("子订单已发货。");
-      await refresh();
+      await refresh("子订单已发货。");
     } catch (error) {
       setMessage(errorMessage(error, "发货失败。"));
     } finally {
@@ -1033,9 +1100,9 @@ export function OwnerOrdersPanel({ csrfToken: initialCsrfToken = "" }: { csrfTok
       </div>
       <div className="compact-list">
         {orders.map((order) => (
-          <article className="compact-row compact-row--five" key={order.shopOrderNo}>
-            <strong>{order.shopOrderNo}</strong>
-            <span>{order.masterOrderNo}</span>
+          <article className="compact-row compact-row--five order-row" key={order.shopOrderNo}>
+            <strong title={order.shopOrderNo}>{displayOrderCode("子订单", order.shopOrderNo)}</strong>
+            <span title={order.masterOrderNo}>{displayOrderCode("所属主订单", order.masterOrderNo)}</span>
             <span>¥{order.subtotalAmount}</span>
             <StatusBadge status={order.status} />
             {order.status === "PENDING_SHIPMENT" ? (
@@ -1045,7 +1112,7 @@ export function OwnerOrdersPanel({ csrfToken: initialCsrfToken = "" }: { csrfTok
                 disabled={csrfToken.length === 0}
                 onClick={() => { void ship(order.shopOrderNo); }}
               >
-                发货：{order.shopOrderNo}
+                标记发货
               </Button>
             ) : null}
           </article>
@@ -1084,7 +1151,21 @@ export function AdminDatabaseEvidencePanel() {
   return (
     <section className="stage-panel" aria-labelledby="admin-database-title">
       <div className="section-heading">
-        <h2 id="admin-database-title">数据库证据</h2>
+        <h2 id="admin-database-title">数据库证据总览</h2>
+      </div>
+      <div className="metric-strip" aria-label="数据库证据摘要">
+        <div>
+          <span>审计日志</span>
+          <strong>{auditLogs.length}</strong>
+        </div>
+        <div>
+          <span>销量排行</span>
+          <strong>{topProducts.length}</strong>
+        </div>
+        <div>
+          <span>开放能力</span>
+          <strong>只读</strong>
+        </div>
       </div>
       <div className="evidence-grid">
         <section aria-labelledby="audit-log-title">
@@ -1093,9 +1174,9 @@ export function AdminDatabaseEvidencePanel() {
             {auditLogs.map((log) => (
               <article className="compact-row compact-row--five" key={log.id}>
                 <strong>{log.tableName}</strong>
-                <span>{log.action}</span>
-                <span>{log.recordId}</span>
-                <span>{log.actorUserId ?? "系统"}</span>
+                <span>{auditActionLabel(log.action)}</span>
+                <span>记录 {log.recordId}</span>
+                <span>{log.actorUserId === null ? "系统触发" : `用户 ${log.actorUserId}`}</span>
                 <span>{formatDisplayDate(log.createdAt)}</span>
               </article>
             ))}
@@ -1192,6 +1273,23 @@ function newCheckoutToken(): string {
 
 function formatDisplayDate(value: string): string {
   return new Date(value).toLocaleString("zh-CN", { hour12: false });
+}
+
+function displayOrderCode(label: string, orderNo: string): string {
+  return `${label} ${orderNo.slice(-6).toUpperCase()}`;
+}
+
+function auditActionLabel(action: string): string {
+  if (action === "STATUS_CHANGE") {
+    return "状态变更";
+  }
+  if (action === "INSERT") {
+    return "新增记录";
+  }
+  if (action === "UPDATE") {
+    return "更新记录";
+  }
+  return action;
 }
 
 function errorMessage(error: unknown, fallback: string): string {

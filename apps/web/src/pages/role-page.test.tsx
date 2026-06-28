@@ -12,6 +12,7 @@ import {
   getCart,
   getMyMerchantApplication,
   getOwnerShop,
+  getPrivateProfile,
   listAddresses,
   listAuditLogs,
   listAdminCategories,
@@ -31,7 +32,7 @@ import {
   submitMerchantApplication,
   uploadProductImage
 } from "../api/client.js";
-import { RolePage } from "./role-page.js";
+import { MemberMerchantApplicationPanel, RolePage } from "./role-page.js";
 
 vi.mock("../api/client.js", () => ({
   ApiClientError: class ApiClientError extends Error {
@@ -48,6 +49,7 @@ vi.mock("../api/client.js", () => ({
   getCart: vi.fn(),
   getMyMerchantApplication: vi.fn(),
   getOwnerShop: vi.fn(),
+  getPrivateProfile: vi.fn(),
   listAddresses: vi.fn(),
   listAuditLogs: vi.fn(),
   listAdminCategories: vi.fn(),
@@ -78,6 +80,7 @@ const mockedFetchCsrf = vi.mocked(fetchCsrf);
 const mockedGetCart = vi.mocked(getCart);
 const mockedGetMyMerchantApplication = vi.mocked(getMyMerchantApplication);
 const mockedGetOwnerShop = vi.mocked(getOwnerShop);
+const mockedGetPrivateProfile = vi.mocked(getPrivateProfile);
 const mockedListAddresses = vi.mocked(listAddresses);
 const mockedListAuditLogs = vi.mocked(listAuditLogs);
 const mockedListAdminCategories = vi.mocked(listAdminCategories);
@@ -101,6 +104,13 @@ describe("RolePage 商户入驻区块", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedFetchCsrf.mockResolvedValue("csrf-token");
+    mockedGetPrivateProfile.mockResolvedValue({
+      id: "1",
+      username: "member01",
+      displayName: "会员一",
+      phone: "13800138000",
+      roles: ["MEMBER"]
+    });
     mockedListAddresses.mockResolvedValue([]);
     mockedGetCart.mockResolvedValue({ items: [], totalAmount: "0.00" });
     mockedListPublicCategories.mockResolvedValue([]);
@@ -122,7 +132,7 @@ describe("RolePage 商户入驻区块", () => {
   it("会员无申请时显示开店申请表", async () => {
     mockedGetMyMerchantApplication.mockResolvedValue(null);
 
-    renderRole("MEMBER");
+    renderMemberApplication();
 
     expect(await screen.findByRole("heading", { name: "开店申请" })).toBeInTheDocument();
     expect(screen.getByLabelText("店铺名称")).toBeInTheDocument();
@@ -135,8 +145,9 @@ describe("RolePage 商户入驻区块", () => {
 
     renderRole("MEMBER");
 
-    expect(await screen.findByRole("heading", { name: "开店申请" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "商品目录" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "会员首页" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "开店申请" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "店主后台" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "管理员后台" })).not.toBeInTheDocument();
   });
@@ -144,7 +155,7 @@ describe("RolePage 商户入驻区块", () => {
   it("会员申请表输入不合法时不发起提交请求", async () => {
     mockedGetMyMerchantApplication.mockResolvedValue(null);
 
-    renderRole("MEMBER");
+    renderMemberApplication();
     await screen.findByRole("heading", { name: "开店申请" });
     fireEvent.change(screen.getByLabelText("店铺名称"), { target: { value: "星" } });
     fireEvent.change(screen.getByLabelText("店铺简介"), { target: { value: "太短" } });
@@ -162,7 +173,7 @@ describe("RolePage 商户入驻区块", () => {
       "request-123"
     ));
 
-    renderRole("MEMBER");
+    renderMemberApplication();
     await screen.findByRole("heading", { name: "开店申请" });
     fireEvent.change(screen.getByLabelText("店铺名称"), { target: { value: "星选鲜果铺" } });
     fireEvent.change(screen.getByLabelText("店铺简介"), { target: { value: "主营当季水果和社区精选礼盒" } });
@@ -186,7 +197,7 @@ describe("RolePage 商户入驻区块", () => {
       updatedAt: "2026-06-23T08:00:00.000Z"
     });
 
-    renderRole("MEMBER");
+    renderMemberApplication();
 
     expect(await screen.findByText("等待管理员审核")).toBeInTheDocument();
     expect(screen.getByText("星选鲜果铺")).toBeInTheDocument();
@@ -206,7 +217,7 @@ describe("RolePage 商户入驻区块", () => {
       updatedAt: "2026-06-23T08:10:00.000Z"
     });
 
-    renderRole("MEMBER");
+    renderMemberApplication();
 
     expect(await screen.findByText("店铺简介需要补充主营品类")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重新提交申请" })).toBeInTheDocument();
@@ -483,15 +494,15 @@ describe("RolePage 商户入驻区块", () => {
       totalAmount: "39.80"
     });
     mockedListMemberOrders.mockResolvedValue([{
-      orderNo: "MO202606280001",
+      orderNo: "MO6f5a1954726111f193440afda4b47e66",
       status: "PENDING_PAYMENT",
       totalAmount: "39.80",
       shopOrderCount: 1,
       createdAt: "2026-06-24T01:00:00.000Z"
     }]);
     mockedListMemberShopOrders.mockResolvedValue([{
-      shopOrderNo: "SO202606280001",
-      masterOrderNo: "MO202606280001",
+      shopOrderNo: "SO6f5a251a726111f193440afda4b47e66",
+      masterOrderNo: "MO6f5a1954726111f193440afda4b47e66",
       status: "SHIPPED",
       subtotalAmount: "39.80",
       itemCount: 2,
@@ -509,17 +520,17 @@ describe("RolePage 商户入驻区块", () => {
       createdAt: "2026-06-24T01:00:00.000Z",
       updatedAt: "2026-06-24T01:00:00.000Z"
     });
-    mockedCheckoutCart.mockResolvedValue({ orderNo: "MO202606280001" });
+    mockedCheckoutCart.mockResolvedValue({ orderNo: "MO6f5a1954726111f193440afda4b47e66" });
     mockedPayOrder.mockResolvedValue({
-      orderNo: "MO202606280001",
+      orderNo: "MO6f5a1954726111f193440afda4b47e66",
       status: "PAID",
       totalAmount: "39.80",
       shopOrderCount: 1,
       createdAt: "2026-06-24T01:00:00.000Z"
     });
     mockedConfirmShopOrder.mockResolvedValue({
-      shopOrderNo: "SO202606280001",
-      masterOrderNo: "MO202606280001",
+      shopOrderNo: "SO6f5a251a726111f193440afda4b47e66",
+      masterOrderNo: "MO6f5a1954726111f193440afda4b47e66",
       status: "COMPLETED",
       subtotalAmount: "39.80",
       itemCount: 2,
@@ -528,6 +539,13 @@ describe("RolePage 商户入驻区块", () => {
 
     renderRole("MEMBER");
     expect(await screen.findByRole("heading", { name: "购物车与订单" })).toBeInTheDocument();
+    expect(screen.getByLabelText("收货手机号")).toHaveValue("13800138000");
+    expect(screen.getByLabelText("省份").tagName).toBe("SELECT");
+    expect(screen.getByLabelText("城市").tagName).toBe("SELECT");
+    expect(screen.getByLabelText("区县").tagName).toBe("SELECT");
+    fireEvent.change(screen.getByLabelText("省份"), { target: { value: "新疆维吾尔自治区" } });
+    expect(screen.getByLabelText("城市")).toHaveValue("乌鲁木齐市");
+    expect(screen.getByLabelText("区县")).toHaveValue("天山区");
     fireEvent.change(screen.getByLabelText("收货人"), { target: { value: "李四" } });
     fireEvent.change(screen.getByLabelText("收货手机号"), { target: { value: "13800000000" } });
     fireEvent.change(screen.getByLabelText("省份"), { target: { value: "广东省" } });
@@ -542,14 +560,18 @@ describe("RolePage 商户入驻区块", () => {
     await waitFor(() => {
       expect(mockedCheckoutCart).toHaveBeenCalledWith(expect.objectContaining({ addressId: "2" }), "csrf-token");
     });
-    fireEvent.click(screen.getByRole("button", { name: "模拟支付：MO202606280001" }));
+    fireEvent.click(screen.getByRole("button", { name: "去支付" }));
     await waitFor(() => {
-      expect(mockedPayOrder).toHaveBeenCalledWith("MO202606280001", "csrf-token");
+      expect(mockedPayOrder).toHaveBeenCalledWith("MO6f5a1954726111f193440afda4b47e66", "csrf-token");
     });
-    fireEvent.click(screen.getByRole("button", { name: "确认收货：SO202606280001" }));
+    expect(screen.getByText("主订单 B47E66")).toBeInTheDocument();
+    expect(screen.getByText("子订单 B47E66")).toBeInTheDocument();
+    expect(screen.queryByText("MO6f5a1954726111f193440afda4b47e66")).not.toBeInTheDocument();
+    expect(screen.queryByText("SO6f5a251a726111f193440afda4b47e66")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "确认收货" }));
 
     await waitFor(() => {
-      expect(mockedConfirmShopOrder).toHaveBeenCalledWith("SO202606280001", "csrf-token");
+      expect(mockedConfirmShopOrder).toHaveBeenCalledWith("SO6f5a251a726111f193440afda4b47e66", "csrf-token");
     });
   });
 
@@ -575,8 +597,37 @@ describe("RolePage 商户入驻区块", () => {
     const image = await screen.findByRole("img", { name: "高山苹果" });
     fireEvent.error(image);
 
-    expect(image).toHaveAttribute("src", "/product-placeholder.svg");
+    expect(image).toHaveAttribute("src", "/product-placeholder.png");
   });
+
+  it("公开商品图片尺寸过小时显示统一占位图", async () => {
+    mockedGetMyMerchantApplication.mockResolvedValue(null);
+    mockedListPublicProducts.mockResolvedValue({
+      data: [{
+        id: "10",
+        name: "高山苹果",
+        description: "现摘现发，适合家庭分享",
+        price: "19.90",
+        stock: 20,
+        mainImagePath: "/uploads/products/2026/06/tiny.png",
+        category: { id: "1", name: "新鲜水果" },
+        shop: { id: "3", name: "水果公开店" },
+        createdAt: "2026-06-24T01:00:00.000Z",
+        updatedAt: "2026-06-24T01:00:00.000Z"
+      }],
+      meta: { page: 1, pageSize: 20, total: 1 }
+    });
+
+    renderRole("MEMBER");
+    const image = await screen.findByRole("img", { name: "高山苹果" });
+    Object.defineProperty(image, "complete", { configurable: true, value: true });
+    Object.defineProperty(image, "naturalWidth", { configurable: true, value: 1 });
+    Object.defineProperty(image, "naturalHeight", { configurable: true, value: 1 });
+    fireEvent.load(image);
+
+    expect(image).toHaveAttribute("src", "/product-placeholder.png");
+  });
+
 
   it("管理员页面可创建分类", async () => {
     mockedListMerchantApplications.mockResolvedValue({ data: [], meta: { page: 1, pageSize: 20, total: 0 } });
@@ -690,9 +741,9 @@ describe("RolePage 商户入驻区块", () => {
 
     renderRole("OWNER");
     expect(await screen.findByRole("heading", { name: "订单履约" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "发货：SO202606280001" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "发货：SO202606280002" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "发货：SO202606280001" }));
+    expect(screen.getByRole("button", { name: "标记发货" })).toBeInTheDocument();
+    expect(screen.getByText("子订单 280002")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "标记发货" }));
 
     await waitFor(() => {
       expect(mockedShipShopOrder).toHaveBeenCalledWith("SO202606280001", "csrf-token");
@@ -720,7 +771,9 @@ describe("RolePage 商户入驻区块", () => {
 
     renderRole("ADMIN");
 
-    expect(await screen.findByRole("heading", { name: "数据库证据" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "数据库证据总览" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "审计日志" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "有效销量 Top 10" })).toBeInTheDocument();
     expect(screen.getByText("shop_orders")).toBeInTheDocument();
     expect(screen.getByText("高山苹果")).toBeInTheDocument();
     expect(screen.queryByLabelText(/SQL/i)).not.toBeInTheDocument();
@@ -731,6 +784,14 @@ function renderRole(role: "MEMBER" | "OWNER" | "ADMIN", csrfToken = "csrf-token"
   render(
     <MemoryRouter>
       <RolePage role={role} csrfToken={csrfToken} />
+    </MemoryRouter>
+  );
+}
+
+function renderMemberApplication(): void {
+  render(
+    <MemoryRouter>
+      <MemberMerchantApplicationPanel />
     </MemoryRouter>
   );
 }

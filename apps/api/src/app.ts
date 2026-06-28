@@ -24,6 +24,7 @@ export interface AppDependencies {
   checkoutRepository?: CheckoutRepository;
   sessionStore?: MysqlSessionStore;
   sessionSecret?: string;
+  uploadRoot?: string;
 }
 
 export function createApp(dependencies: AppDependencies): Express {
@@ -72,8 +73,9 @@ export function createApp(dependencies: AppDependencies): Express {
       );
     }
   }
-  app.use("/api/v1/uploads", express.static("uploads"));
-  app.use("/uploads", express.static("uploads"));
+  const uploadRoot = dependencies.uploadRoot ?? "uploads";
+  app.use("/api/v1/uploads", express.static(uploadRoot));
+  app.use("/uploads", express.static(uploadRoot));
   app.use("/api/v1/health", createHealthRouter(dependencies.healthRepository));
   app.use(errorHandler);
 

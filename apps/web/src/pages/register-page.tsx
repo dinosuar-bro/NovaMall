@@ -55,9 +55,9 @@ export function RegisterPage() {
     setLoading(true);
     try {
       await register({
-        username: formValue(formData, "username"),
+        username: formValue(formData, "username").trim(),
         password,
-        phone: formValue(formData, "phone")
+        phone: formValue(formData, "phone").trim()
       }, csrfToken);
       void navigate("/member/catalog");
     } catch (error) {

@@ -7,7 +7,7 @@ const execFileAsync = promisify(execFile);
 const demoPassword = "StrongPass123!";
 
 test.beforeAll(async () => {
-  await execFileAsync("docker", ["compose", "run", "--rm", "--build", "seed-demo"], {
+  await execFileAsync("docker", ["compose", "run", "--rm", "seed-demo"], {
     timeout: 120_000
   });
 });
@@ -53,7 +53,8 @@ test("会员提交开店申请后，管理员批准并进入店主后台", async
   await page.getByRole("button", { name: "注册并进入会员首页" }).click();
 
   await expect(page.getByRole("heading", { level: 2, name: "商品目录" })).toBeVisible();
-  await page.getByRole("link", { name: "开店申请" }).click();
+  await page.getByRole("button", { name: /新会员/ }).click();
+  await page.getByRole("menuitem", { name: "申请开店" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "开店申请" })).toBeVisible();
   await page.getByLabel("店铺名称").fill(shopName);
   await page.getByLabel("店铺简介").fill("主营社区精选商品和测试礼盒");
@@ -104,11 +105,7 @@ test("管理员创建分类，店主发布带图商品，会员可搜索查看",
   await page.getByLabel("商品库存").fill("20");
   await expect(page.getByLabel("商品价格")).toHaveValue("19.90");
   await expect(page.getByLabel("商品库存")).toHaveValue("20");
-  await page.getByLabel("商品图片").setInputFiles({
-    name: "apple.png",
-    mimeType: "image/png",
-    buffer: tinyPng()
-  });
+  await page.getByLabel("商品图片").setInputFiles("apps/web/public/product-placeholder.png");
   await expect(page.getByRole("button", { name: "创建草稿商品" })).toBeEnabled();
   const uploadResponsePromise = page.waitForResponse((response) => (
     response.url().includes("/api/v1/uploads/products") && response.request().method() === "POST"
@@ -146,35 +143,35 @@ test("管理员创建分类，店主发布带图商品，会员可搜索查看",
   await expect(page.getByRole("heading", { level: 2, name: "购物车与订单" })).toBeVisible();
   await page.getByLabel("收货人").fill("张三");
   await page.getByLabel("收货手机号").fill("13900000000");
-  await page.getByLabel("省份").fill("广东省");
-  await page.getByLabel("城市").fill("深圳市");
-  await page.getByLabel("区县").fill("南山区");
+  await page.getByLabel("省份").selectOption("广东省");
+  await page.getByLabel("城市").selectOption("深圳市");
+  await page.getByLabel("区县").selectOption("南山区");
   await page.getByLabel("详细地址").fill("科技园 1 号");
   await page.getByRole("button", { name: "保存地址" }).click();
   await expect(page.locator(".status-message").filter({ hasText: "地址已保存" })).toBeVisible();
   await page.getByRole("button", { name: "提交结算" }).click();
   await expect(page.locator(".status-message").filter({ hasText: "结算成功" })).toBeVisible();
-  await page.getByRole("button", { name: /^模拟支付：/ }).click();
+  await page.getByRole("button", { name: "去支付" }).click();
   await expect(page.locator(".status-message").filter({ hasText: "模拟支付成功" })).toBeVisible();
 
   await page.context().clearCookies();
   await login(page, "demo_owner");
   await page.getByRole("link", { name: "订单履约" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "订单履约" })).toBeVisible();
-  await page.getByRole("button", { name: /^发货：/ }).click();
+  await page.getByRole("button", { name: "标记发货" }).first().click();
   await expect(page.locator(".status-message").filter({ hasText: "子订单已发货" })).toBeVisible();
 
   await page.context().clearCookies();
   await login(page, username);
   await page.getByRole("link", { name: "购物车与订单" }).click();
-  await expect(page.getByRole("button", { name: /^确认收货：/ })).toBeVisible();
-  await page.getByRole("button", { name: /^确认收货：/ }).click();
+  await expect(page.getByRole("button", { name: "确认收货" })).toBeVisible();
+  await page.getByRole("button", { name: "确认收货" }).first().click();
   await expect(page.locator(".status-message").filter({ hasText: "已确认收货" })).toBeVisible();
 
   await page.context().clearCookies();
   await login(page, "demo_admin");
   await page.getByRole("link", { name: "数据库证据" }).click();
-  await expect(page.getByRole("heading", { level: 2, name: "数据库证据" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "数据库证据总览" })).toBeVisible();
   await expect(page.getByText(productName)).toBeVisible();
   await expect(page.getByText("shop_orders").first()).toBeVisible();
 });
@@ -184,13 +181,6 @@ async function login(page: Page, username: string): Promise<void> {
   await page.getByLabel("用户名").fill(username);
   await page.getByLabel("密码", { exact: true }).fill(demoPassword);
   await page.getByRole("button", { name: "登录" }).click();
-}
-
-function tinyPng(): Buffer {
-  return Buffer.from(
-    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000100ffff03000006000557bfab6d0000000049454e44ae426082",
-    "hex"
-  );
 }
 
 async function expectProtectedRequest(page: Page, path: string, expectedStatus: number): Promise<void> {

@@ -12,7 +12,7 @@ const env = loadEnv();
 const pool = createPoolFromEnv(env);
 const authRepository = new AuthRepository(pool, env.PHONE_AES_KEY);
 const merchantApplicationsRepository = new MerchantApplicationsRepository(pool);
-const catalogRepository = new CatalogRepository(pool, "uploads");
+const catalogRepository = new CatalogRepository(pool, env.UPLOAD_ROOT);
 const checkoutRepository = new CheckoutRepository(pool, env.PHONE_AES_KEY);
 
 const app = createApp({
@@ -22,7 +22,8 @@ const app = createApp({
   catalogRepository,
   checkoutRepository,
   sessionStore: new MysqlSessionStore(pool),
-  sessionSecret: env.SESSION_SECRET
+  sessionSecret: env.SESSION_SECRET,
+  uploadRoot: env.UPLOAD_ROOT
 });
 
 const server = app.listen(env.API_PORT, () => {

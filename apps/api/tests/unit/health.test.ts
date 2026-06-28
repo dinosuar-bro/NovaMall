@@ -1,4 +1,7 @@
 import request from "supertest";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { errorResponseSchema } from "@novamall/shared";
 
@@ -51,5 +54,17 @@ describe("健康检查", () => {
     });
     expect(body.error.requestId).toEqual(expect.any(String));
     expect(JSON.stringify(body)).not.toContain("database unavailable");
+  });
+
+  it("按配置的上传目录提供商品图片静态访问", async () => {
+    const uploadRoot = await mkdtemp(join(tmpdir(), "novamall-uploads-"));
+    await writeFile(join(uploadRoot, "sample.png"), Buffer.from("png"));
+
+    await request(createApp({ healthRepository: readyRepository, uploadRoot }))
+      .get("/api/v1/uploads/sample.png")
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toEqual(Buffer.from("png"));
+      });
   });
 });

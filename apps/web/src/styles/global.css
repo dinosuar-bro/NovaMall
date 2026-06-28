@@ -266,6 +266,8 @@ textarea:focus-visible {
 }
 
 .profile-menu {
+  display: grid;
+  justify-items: end;
   position: relative;
 }
 
@@ -488,6 +490,12 @@ textarea:focus-visible {
   padding: 14px;
 }
 
+.compact-row strong,
+.compact-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .compact-row--five {
   grid-template-columns: minmax(150px, 1.4fr) minmax(120px, 1fr) auto auto auto;
 }
@@ -496,6 +504,30 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+}
+
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-strip div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  background: var(--color-surface);
+}
+
+.metric-strip span {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.metric-strip strong {
+  font-size: 24px;
 }
 
 .evidence-grid h3 {
@@ -527,6 +559,16 @@ textarea:focus-visible {
     flex-direction: column;
   }
 
+  .profile-menu {
+    justify-items: stretch;
+  }
+
+  .profile-menu__panel {
+    position: static;
+    margin-top: 8px;
+    box-shadow: none;
+  }
+
   .application-row,
   .row-actions {
     align-items: stretch;
@@ -542,6 +584,7 @@ textarea:focus-visible {
   .catalog-toolbar,
   .form-grid,
   .evidence-grid,
+  .metric-strip,
   .compact-row {
     grid-template-columns: 1fr;
   }
