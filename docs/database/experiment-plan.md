@@ -24,9 +24,9 @@
 
 - 1 个管理员；
 - 3 个会员，其中 2 个审核为店主；
-- 2 个正常店铺；
+- 店主共享平台商品池；
 - 至少 3 个分类和 20 个商品；
-- 可覆盖跨店购物车、库存不足、订单履约和退款的订单数据。
+- 可覆盖统一购物车、库存不足、订单履约和退款的订单数据。
 
 ### 性能数据集
 
@@ -45,7 +45,7 @@
 
 ### 成功用例
 
-准备包含两个店铺商品的购物车，调用 `sp_checkout_cart`。
+准备包含多个商品的购物车，调用 `sp_checkout_cart`。
 
 验证：
 
@@ -176,16 +176,15 @@ MATCH(name, description) AGAINST ('关键词' IN NATURAL LANGUAGE MODE)
 
 ```text
 docs/evidence/database/
-├── environment.md
-├── stored-procedure.md
-├── triggers.md
-├── views.md
-├── indexes.md
-├── transactions.md
-├── window-functions.md
-├── audit.md
-├── fulltext.md
-└── encryption.md
+├── 01-存储过程.md
+├── 02-触发器.md
+├── 03-视图.md
+├── 04-索引优化.md
+├── 05-事务与并发控制.md
+├── 06-窗口函数.md
+├── 07-审计日志.md
+├── 08-全文检索.md
+└── 09-AES数据加密.md
 ```
 
 证据文件包含命令、SQL、期望、实际输出和结论。截图只能作为补充，必须保留可复制的文本结果。

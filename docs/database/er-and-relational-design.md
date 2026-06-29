@@ -2,7 +2,7 @@
 
 ## 1. 设计目标
 
-数据库负责保存平台业务事实、维护关系完整性、支撑跨店订单事务，并为 9 项高阶数据库技术提供真实业务落点。所有业务表使用 InnoDB 和 `utf8mb4`。
+数据库负责保存平台业务事实、维护关系完整性、支撑统一结算事务，并为 9 项高阶数据库技术提供真实业务落点。所有业务表使用 InnoDB 和 `utf8mb4`。
 
 ## 2. 概念 ER 图
 
@@ -155,7 +155,7 @@ SESSIONS(session_id PK, expires, data)
 | 字段                    | 类型            | 空值 | 约束与说明                 |
 | ----------------------- | --------------- | ---: | -------------------------- |
 | id                      | BIGINT UNSIGNED |   否 | PK，自增                   |
-| owner_user_id           | BIGINT UNSIGNED |   否 | UQ/FK → users.id，一人一店 |
+| owner_user_id           | BIGINT UNSIGNED |   否 | UQ/FK → users.id，店主资料归属 |
 | name                    | VARCHAR(100)    |   否 | UQ，店铺名                 |
 | description             | VARCHAR(500)    |   否 | 店铺简介                   |
 | logo_path               | VARCHAR(255)    |   是 | 本地图片相对路径           |

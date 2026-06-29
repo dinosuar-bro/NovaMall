@@ -2,7 +2,7 @@
 
 ## 1. 阶段目标
 
-在 Stage 2 已完成商户入驻、单店店铺和 OWNER 角色的基础上，交付商品目录的最小业务闭环：管理员维护平台分类，店主在自己的店铺内创建和维护商品，上传商品主图，公开用户可按分类和中文关键词搜索上架商品并查看详情。
+在 Stage 2 已完成商户入驻和 OWNER 角色的基础上，交付商品目录的最小业务闭环：管理员维护平台分类，店主共同创建和维护平台共享商品，上传商品主图，公开用户可按分类和中文关键词搜索上架商品并查看详情。
 
 本阶段重点展示分类、商品、图片上传、价格历史、商品审计、复合索引和中文全文检索。购物车、订单、销量排行、复杂 SKU、促销、收藏和评价不属于本阶段。
 
@@ -10,12 +10,12 @@
 
 - 从 Stage 2 数据库继续执行迁移，新增 `categories`、`products` 和 `product_price_history`；
 - 管理员可创建、修改、启用和停用分类；
-- 店主只能管理自己店铺的商品，不能读取或修改其他店铺商品；
+- 店主共同管理平台共享商品，不按店铺隔离商品归属；
 - 店主可创建草稿商品，编辑名称、简介、分类、价格、库存和主图；
 - 店主可将草稿或已下架商品上架，可下架已上架商品，可归档非公开商品；
 - 商品价格变化自动写入 `product_price_history`；
 - 商品价格、库存和状态变化写入 `audit_logs`，审计内容不包含密码、手机号、Cookie 或密钥；
-- 公开商品列表只展示上架商品、启用分类和营业中店铺；
+- 公开商品列表只展示上架商品和启用分类；
 - 公开商品列表支持分类筛选、中文关键词搜索和价格/时间排序；
 - 商品详情只允许查看公开可售商品；
 - 非图片文件、伪装图片和超限文件被拒绝；
@@ -90,7 +90,7 @@ CREATE TABLE products (
 状态规则：
 
 - `DRAFT`：初始草稿，不出现在公开列表；
-- `PUBLISHED`：公开展示，要求分类启用、店铺营业中、主图存在、库存可为 0；
+- `PUBLISHED`：公开展示，要求分类启用、主图存在、库存可为 0；
 - `UNPUBLISHED`：店主主动下架，可重新编辑和上架；
 - `ARCHIVED`：归档终态，不出现在公开列表，不能再次上架。
 
@@ -147,7 +147,7 @@ CREATE TABLE product_price_history (
 - `keyword`：可选，1-80 个字符，前后空白会裁剪；
 - `sort`：`newest`、`priceAsc`、`priceDesc`、`relevance`。
 
-无关键词时不允许使用 `relevance` 排序。公开商品 DTO 包含商品、分类和店铺摘要，金额以两位小数字符串返回。
+无关键词时不允许使用 `relevance` 排序。公开商品 DTO 包含商品和分类摘要，金额以两位小数字符串返回。
 
 ### 5.2 管理员分类接口
 
@@ -165,9 +165,9 @@ CREATE TABLE product_price_history (
 
 | 方法 | 路径 | 角色 | 行为 |
 |---|---|---|---|
-| GET | `/owner/products` | OWNER | 本店商品分页 |
+| GET | `/owner/products` | OWNER | 共享商品分页 |
 | POST | `/owner/products` | OWNER + CSRF | 新增草稿商品 |
-| GET | `/owner/products/:productId` | OWNER | 本店商品详情 |
+| GET | `/owner/products/:productId` | OWNER | 共享商品详情 |
 | PATCH | `/owner/products/:productId` | OWNER + CSRF | 编辑基础字段 |
 | PATCH | `/owner/products/:productId/stock` | OWNER + CSRF | 设置库存 |
 | POST | `/owner/products/:productId/publish` | OWNER + CSRF | 上架商品 |
@@ -176,7 +176,7 @@ CREATE TABLE product_price_history (
 | GET | `/owner/products/:productId/price-history` | OWNER | 查看价格历史 |
 | POST | `/uploads/products` | OWNER + CSRF | 上传商品图片 |
 
-所有店主商品查询和更新条件必须包含当前店主的 `shop_id`。跨店商品统一返回 `RESOURCE_NOT_OWNED` 或 `NOT_FOUND`，不泄露其他店铺商品详情。
+所有店主商品查询和更新基于共享商品池，更新条件必须包含商品 ID 和版本条件。非店主角色访问店主商品接口返回 `FORBIDDEN`。
 
 ## 6. 上传规则
 
@@ -205,7 +205,7 @@ CREATE TABLE product_price_history (
 
 店主工作区增加商品管理面板：
 
-- 本店商品列表；
+- 共享商品列表；
 - 新增草稿和编辑商品；
 - 上传并设置主图；
 - 设置库存；
@@ -218,7 +218,7 @@ CREATE TABLE product_price_history (
 
 - 启用分类筛选；
 - 关键词搜索；
-- 商品卡片展示图片、名称、店铺、分类、价格、库存和状态；
+- 商品卡片展示图片、名称、分类、价格、库存和状态；
 - 商品详情视图可用同页展开或简单详情面板实现。
 
 ## 8. 错误码
@@ -242,10 +242,10 @@ CREATE TABLE product_price_history (
 - API 集成：
   - 管理员分类 CRUD；
   - 店主商品 CRUD；
-  - 跨店访问被拒绝；
+  - 非店主访问被拒绝；
   - 商品状态迁移；
   - 价格历史自动写入；
-  - 公开列表过滤下架商品、停用分类和暂停店铺；
+  - 公开列表过滤下架商品和停用分类；
   - 中文关键词搜索；
   - 非图片和超限文件被拒绝；
 - 前端单元测试：分类管理、商品管理和公开商品搜索的关键状态；
@@ -268,10 +268,10 @@ git diff --check
 E2E 验收在本地服务可用后执行：
 
 ```bash
-CI=true pnpm test:e2e
+env -u CI ./node_modules/.bin/playwright test
 ```
 
-若 pnpm 的非交互式 wrapper 或端口复用导致 E2E 启动失败，可在确认 Docker 服务已启动后使用本地 Playwright 二进制运行：
+若需要使用默认 CI 环境变量，可去掉 `env -u CI`，但需确认本地 Docker 服务和端口已可用：
 
 ```bash
 ./node_modules/.bin/playwright test
@@ -279,7 +279,7 @@ CI=true pnpm test:e2e
 
 ## 10. 索引与全文检索证据
 
-本阶段在 `docs/evidence/database/catalog-search.md` 保存初步证据：
+本阶段商品搜索证据已合并到 `docs/evidence/database/08-全文检索.md`：
 
 - 数据库版本；
 - 测试数据规模；

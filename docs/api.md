@@ -82,19 +82,19 @@
 | GET | `/merchant-applications/me` | 会员 | 查看自己的申请 |
 | PUT | `/merchant-applications/me` | 会员 | 首次提交或修改后重新提交 |
 | GET | `/admin/merchant-applications` | 管理员 | 分页查询申请 |
-| POST | `/admin/merchant-applications/:id/approve` | 管理员 | 批准并创建店铺、授予角色 |
+| POST | `/admin/merchant-applications/:id/approve` | 管理员 | 批准申请并授予店主角色 |
 | POST | `/admin/merchant-applications/:id/reject` | 管理员 | 拒绝，必须提供原因 |
 
 审核接口使用当前状态条件更新，只允许审核 `PENDING` 申请。
 
-## 5. 分类与商品公开接口
+## 5. 分类、商品与销量展示
 
 | 方法 | 路径 | 角色 | 说明 |
 |---|---|---|---|
 | GET | `/categories` | 公开 | 正常分类列表 |
 | GET | `/products` | 公开 | 商品分页、分类筛选和全文搜索 |
 | GET | `/products/:productId` | 公开 | 上架商品详情 |
-| GET | `/analytics/products/top10` | 公开 | 全平台累计有效销量 Top 10 |
+| GET | `/admin/database/top-products` | 管理员 | 全平台累计有效销量 Top 10 |
 
 `GET /products` 参数：
 
@@ -109,11 +109,11 @@
 
 | 方法 | 路径 | 角色 | 说明 |
 |---|---|---|---|
-| GET | `/owner/shop` | 店主 | 查看自己的店铺 |
-| PATCH | `/owner/shop` | 店主 | 修改店铺资料 |
-| GET | `/owner/products` | 店主 | 本店商品分页 |
+| GET | `/owner/shop` | 店主 | 查看店主资料 |
+| PATCH | `/owner/shop` | 店主 | 修改店主资料 |
+| GET | `/owner/products` | 店主 | 共享商品分页 |
 | POST | `/owner/products` | 店主 | 新增草稿商品 |
-| GET | `/owner/products/:productId` | 店主 | 本店商品详情 |
+| GET | `/owner/products/:productId` | 店主 | 共享商品详情 |
 | PATCH | `/owner/products/:productId` | 店主 | 编辑商品 |
 | PATCH | `/owner/products/:productId/stock` | 店主 | 调整库存 |
 | POST | `/owner/products/:productId/publish` | 店主 | 上架 |
@@ -122,7 +122,7 @@
 | GET | `/owner/products/:productId/price-history` | 店主 | 价格历史 |
 | POST | `/uploads/products` | 店主 | 上传商品图片 |
 
-更新条件必须包含 `product_id` 和当前店铺 ID。库存接口接收目标库存值和版本/更新时间，用冲突响应防止后台页面覆盖新库存。
+商品由所有店主共享维护，更新条件必须包含 `product_id` 和版本/更新时间。库存接口接收目标库存值和版本/更新时间，用冲突响应防止后台页面覆盖新库存。
 
 ## 7. 管理员分类与账号
 
@@ -133,9 +133,7 @@
 | PATCH | `/admin/categories/:id` | 管理员 | 修改分类 |
 | POST | `/admin/categories/:id/disable` | 管理员 | 停用分类 |
 | POST | `/admin/categories/:id/enable` | 管理员 | 启用分类 |
-| GET | `/admin/users` | 管理员 | 用户分页与角色筛选 |
-| POST | `/admin/users/:id/disable` | 管理员 | 禁用账号 |
-| POST | `/admin/users/:id/enable` | 管理员 | 启用账号 |
+用户分页、禁用和启用属于后续补充能力，当前阶段未暴露管理员账号管理 API。当前管理员能力聚焦开店审核、分类管理、审计日志和数据库证据展示。
 
 停用分类不自动下架商品；公开商品查询同时要求分类正常。
 
@@ -143,11 +141,11 @@
 
 | 方法 | 路径 | 角色 | 说明 |
 |---|---|---|---|
-| GET | `/member/cart` | 会员 | 按店铺聚合购物车 |
+| GET | `/member/cart` | 会员 | 当前会员购物车 |
 | POST | `/member/cart/items` | 会员 | 添加商品或原子增加数量 |
 | PATCH | `/member/cart/items/:itemId` | 会员 | 修改数量 |
 | DELETE | `/member/cart/items/:itemId` | 会员 | 删除一项 |
-| POST | `/member/checkout` | 会员 | 调用存储过程跨店结算 |
+| POST | `/member/checkout` | 会员 | 调用存储过程统一结算 |
 
 结算请求：
 
@@ -158,7 +156,7 @@
 }
 ```
 
-结算响应返回总订单号、总金额和子订单摘要。客户端提交的价格和店铺分组均被忽略。
+结算响应返回总订单号、总金额和子订单摘要。客户端提交的价格和分组信息均被忽略。
 
 ## 9. 订单、支付与履约
 
@@ -169,29 +167,19 @@
 | POST | `/member/orders/:orderNo/pay` | 会员 | 模拟支付 |
 | POST | `/member/orders/:orderNo/cancel` | 会员 | 取消待支付总订单 |
 | POST | `/member/shop-orders/:shopOrderNo/confirm` | 会员 | 确认收货 |
-| GET | `/owner/shop-orders` | 店主 | 本店子订单列表 |
+| GET | `/owner/shop-orders` | 店主 | 共享履约子订单列表 |
 | POST | `/owner/shop-orders/:shopOrderNo/ship` | 店主 | 发货 |
 
 支付、取消、发货和确认收货都使用带当前状态条件的更新。重复支付和重复状态操作返回原成功状态或 409，不产生重复副作用。
 
 ## 10. 退款
 
-| 方法 | 路径 | 角色 | 说明 |
-|---|---|---|---|
-| POST | `/shop-orders/:shopOrderNo/refund` | 会员 | 对自己的待发货子订单申请整单退款 |
-| GET | `/refunds` | 会员 | 自己的退款记录 |
-| GET | `/owner/refunds` | 店主 | 本店待审核/历史退款 |
-| POST | `/owner/refunds/:refundNo/approve` | 店主 | 批准并恢复库存 |
-| POST | `/owner/refunds/:refundNo/reject` | 店主 | 拒绝，必须填写原因 |
-
-退款金额由数据库根据子订单确定，不接受客户端金额。
+退款属于数据库专项和后续补充范围，当前 Stage 5/Stage 6 浏览器演示不暴露退款 API。若后续实现退款接口，金额必须由数据库根据子订单确定，不接受客户端金额，并且批准事务必须恢复库存、更新退款状态、更新子订单状态并写入审计。
 
 ## 11. 报表与审计
 
 | 方法 | 路径 | 角色 | 说明 |
 |---|---|---|---|
-| GET | `/owner/analytics/summary` | 店主 | 本店销售汇总 |
-| GET | `/admin/analytics/summary` | 管理员 | 平台汇总 |
 | GET | `/admin/audit-logs` | 管理员 | 最近 50 条审计日志 |
 | GET | `/admin/database/top-products` | 管理员 | 基于有效销量视图和窗口函数的 Top 10 |
 
@@ -209,11 +197,11 @@
 | FORBIDDEN | 403 | 角色不足 |
 | USERNAME_TAKEN | 409 | 用户名已被使用 |
 | SERVICE_NOT_READY | 503 | 服务依赖未就绪 |
-| RESOURCE_NOT_OWNED | 403 | 资源不属于当前用户/店铺 |
+| RESOURCE_NOT_OWNED | 403 | 资源不属于当前用户或当前角色无权操作 |
 | NOT_FOUND | 404 | 资源不存在 |
 | EMPTY_CART | 409 | 购物车为空 |
 | OUT_OF_STOCK | 409 | 库存不足 |
-| PRODUCT_UNAVAILABLE | 409 | 商品或店铺不可用 |
+| PRODUCT_UNAVAILABLE | 409 | 商品或分类不可用 |
 | CATEGORY_NAME_TAKEN | 409 | 分类名已被使用 |
 | PRODUCT_STATE_CONFLICT | 409 | 当前商品状态不允许此操作 |
 | PRODUCT_VERSION_CONFLICT | 409 | 商品版本已变化，需要刷新后重试 |

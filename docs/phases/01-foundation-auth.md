@@ -133,14 +133,14 @@ Session Store 使用 MySQL 表保存 Session ID、过期时间和序列化数据
 
 ### 认证页
 
-- 左侧/上方为简短品牌说明，右侧/下方为表单；移动端转为单列；
+- 左侧为简短品牌说明，右侧为表单，统一按桌面端布局；
 - 登录和注册使用明确独立路由，不用难以返回的全屏模式切换；
 - 字段包含持久标签、帮助/错误文本、密码可见性按钮和提交状态；
 - 服务端字段错误映射回对应控件，未知错误显示 requestId。
 
 ### 角色应用壳
 
-- MEMBER：顶部导航和“商城功能即将开放”的可操作空状态；
+- MEMBER：桌面端导航和“商城功能即将开放”的可操作空状态；
 - OWNER：桌面侧栏，展示店铺阶段尚未开放并引导等待 Stage 2；
 - ADMIN：桌面侧栏，展示审核与管理功能尚未开放；
 - 多角色用户默认进入最近/优先角色，可从账号菜单切换已拥有角色视图；
@@ -235,7 +235,7 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm test:integration
-pnpm test:e2e
+env -u CI ./node_modules/.bin/playwright test
 pnpm build
 docker compose config
 docker compose up --build
