@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +8,7 @@ import {
   checkoutCart,
   confirmShopOrder,
   createAddress,
+  deleteCartItem,
   fetchCsrf,
   getCart,
   getMyMerchantApplication,
@@ -30,9 +31,10 @@ import {
   rejectMerchantApplication,
   shipShopOrder,
   submitMerchantApplication,
+  updateCartItem,
   uploadProductImage
 } from "../api/client.js";
-import { MemberMerchantApplicationPanel, RolePage } from "./role-page.js";
+import { AdminDatabaseEvidencePanel, MemberCatalogPanel, MemberMerchantApplicationPanel, OwnerProductPanel, RolePage } from "./role-page.js";
 
 vi.mock("../api/client.js", () => ({
   ApiClientError: class ApiClientError extends Error {
@@ -45,6 +47,7 @@ vi.mock("../api/client.js", () => ({
   checkoutCart: vi.fn(),
   confirmShopOrder: vi.fn(),
   createAddress: vi.fn(),
+  deleteCartItem: vi.fn(),
   fetchCsrf: vi.fn(),
   getCart: vi.fn(),
   getMyMerchantApplication: vi.fn(),
@@ -67,6 +70,7 @@ vi.mock("../api/client.js", () => ({
   publishOwnerProduct: vi.fn(),
   shipShopOrder: vi.fn(),
   submitMerchantApplication: vi.fn(),
+  updateCartItem: vi.fn(),
   uploadProductImage: vi.fn(),
   approveMerchantApplication: vi.fn(),
   rejectMerchantApplication: vi.fn()
@@ -76,6 +80,7 @@ const mockedAddCartItem = vi.mocked(addCartItem);
 const mockedCheckoutCart = vi.mocked(checkoutCart);
 const mockedConfirmShopOrder = vi.mocked(confirmShopOrder);
 const mockedCreateAddress = vi.mocked(createAddress);
+const mockedDeleteCartItem = vi.mocked(deleteCartItem);
 const mockedFetchCsrf = vi.mocked(fetchCsrf);
 const mockedGetCart = vi.mocked(getCart);
 const mockedGetMyMerchantApplication = vi.mocked(getMyMerchantApplication);
@@ -99,6 +104,7 @@ const mockedShipShopOrder = vi.mocked(shipShopOrder);
 const mockedUploadProductImage = vi.mocked(uploadProductImage);
 const mockedSubmitMerchantApplication = vi.mocked(submitMerchantApplication);
 const mockedRejectMerchantApplication = vi.mocked(rejectMerchantApplication);
+const mockedUpdateCartItem = vi.mocked(updateCartItem);
 
 describe("RolePage 商户入驻区块", () => {
   beforeEach(() => {
@@ -460,10 +466,39 @@ describe("RolePage 商户入驻区块", () => {
     await waitFor(() => {
       expect(mockedAddCartItem).toHaveBeenCalledWith({ productId: "10", quantity: 1 }, "csrf-token");
     });
-    expect(await screen.findByText("已加入购物车。")).toBeInTheDocument();
+    expect(await screen.findByText("已加入购物车：高山苹果 x1")).toBeInTheDocument();
+    expect(screen.getByText("高山苹果").closest("article")).toHaveClass("product-card--added");
   });
 
-  it("会员购物车与订单面板可创建地址、结算、支付和确认收货", async () => {
+  it("会员商品分类读取失败时仍展示已读取商品", async () => {
+    mockedListPublicCategories.mockRejectedValue(new Error("categories failed"));
+    mockedListPublicProducts.mockResolvedValue({
+      data: [{
+        id: "10",
+        name: "高山苹果",
+        description: "现摘现发，适合家庭分享",
+        price: "19.90",
+        stock: 20,
+        mainImagePath: "/uploads/products/2026/06/apple.png",
+        category: { id: "1", name: "新鲜水果" },
+        shop: { id: "3", name: "共享商品池" },
+        createdAt: "2026-06-24T01:00:00.000Z",
+        updatedAt: "2026-06-24T01:00:00.000Z"
+      }],
+      meta: { page: 1, pageSize: 20, total: 1 }
+    });
+
+    render(
+      <MemoryRouter>
+        <MemberCatalogPanel />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("高山苹果")).toBeInTheDocument();
+    expect(screen.queryByText("暂时无法读取商品目录。")).not.toBeInTheDocument();
+  });
+
+  it("会员购物车页可创建地址、修改数量、删除商品并在确认弹窗后结算", async () => {
     mockedGetMyMerchantApplication.mockResolvedValue(null);
     mockedListAddresses.mockResolvedValue([{
       id: "1",
@@ -493,6 +528,23 @@ describe("RolePage 商户入驻区块", () => {
       }],
       totalAmount: "39.80"
     });
+    mockedUpdateCartItem.mockResolvedValue({
+      items: [{
+        id: "8",
+        productId: "10",
+        productName: "高山苹果",
+        shopId: "3",
+        shopName: "水果公开店",
+        unitPrice: "19.90",
+        quantity: 3,
+        lineAmount: "59.70",
+        stock: 20,
+        mainImagePath: null,
+        available: true
+      }],
+      totalAmount: "59.70"
+    });
+    mockedDeleteCartItem.mockResolvedValue({ items: [], totalAmount: "0.00" });
     mockedListMemberOrders.mockResolvedValue([{
       orderNo: "MO6f5a1954726111f193440afda4b47e66",
       status: "PENDING_PAYMENT",
@@ -538,8 +590,9 @@ describe("RolePage 商户入驻区块", () => {
     });
 
     renderRole("MEMBER");
-    expect(await screen.findByRole("heading", { name: "购物车与订单" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "购物车" })).toBeInTheDocument();
     expect(screen.getByLabelText("收货手机号")).toHaveValue("13800138000");
+    expect(screen.getByRole("option", { name: "请选择地址" })).toBeDisabled();
     expect(screen.getByLabelText("省份").tagName).toBe("SELECT");
     expect(screen.getByLabelText("城市").tagName).toBe("SELECT");
     expect(screen.getByLabelText("区县").tagName).toBe("SELECT");
@@ -556,10 +609,68 @@ describe("RolePage 商户入驻区块", () => {
     await waitFor(() => {
       expect(mockedCreateAddress).toHaveBeenCalled();
     });
+    const quantityInput = screen.getByLabelText("商品数量：高山苹果");
+    fireEvent.change(quantityInput, { target: { value: "3" } });
+    fireEvent.blur(quantityInput);
+    await waitFor(() => {
+      expect(mockedUpdateCartItem).toHaveBeenCalledWith("8", { quantity: 3 }, "csrf-token");
+    });
+    expect(screen.queryByRole("button", { name: "更新数量：高山苹果" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "提交结算" }));
+    expect(mockedCheckoutCart).not.toHaveBeenCalled();
+    const checkoutDialog = await screen.findByRole("dialog", { name: "确认结算明细" });
+    expect(within(checkoutDialog).getByText("高山苹果")).toBeInTheDocument();
+    expect(within(checkoutDialog).getByText("¥19.90")).toBeInTheDocument();
+    expect(within(checkoutDialog).getByText("¥59.70")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "确认结算" }));
     await waitFor(() => {
       expect(mockedCheckoutCart).toHaveBeenCalledWith(expect.objectContaining({ addressId: "2" }), "csrf-token");
     });
+    const deleteButton = screen.getByRole("button", { name: "删除商品：高山苹果" });
+    expect(deleteButton).toHaveTextContent("×");
+    fireEvent.click(deleteButton);
+    await waitFor(() => {
+      expect(mockedDeleteCartItem).toHaveBeenCalledWith("8", "csrf-token");
+    });
+  });
+
+  it("会员订单页可支付和确认收货", async () => {
+    mockedGetMyMerchantApplication.mockResolvedValue(null);
+    mockedListAddresses.mockResolvedValue([]);
+    mockedGetCart.mockResolvedValue({ items: [], totalAmount: "0.00" });
+    mockedListMemberOrders.mockResolvedValue([{
+      orderNo: "MO6f5a1954726111f193440afda4b47e66",
+      status: "PENDING_PAYMENT",
+      totalAmount: "39.80",
+      shopOrderCount: 1,
+      createdAt: "2026-06-24T01:00:00.000Z"
+    }]);
+    mockedListMemberShopOrders.mockResolvedValue([{
+      shopOrderNo: "SO6f5a251a726111f193440afda4b47e66",
+      masterOrderNo: "MO6f5a1954726111f193440afda4b47e66",
+      status: "SHIPPED",
+      subtotalAmount: "39.80",
+      itemCount: 2,
+      createdAt: "2026-06-24T01:00:00.000Z"
+    }]);
+    mockedPayOrder.mockResolvedValue({
+      orderNo: "MO6f5a1954726111f193440afda4b47e66",
+      status: "PAID",
+      totalAmount: "39.80",
+      shopOrderCount: 1,
+      createdAt: "2026-06-24T01:00:00.000Z"
+    });
+    mockedConfirmShopOrder.mockResolvedValue({
+      shopOrderNo: "SO6f5a251a726111f193440afda4b47e66",
+      masterOrderNo: "MO6f5a1954726111f193440afda4b47e66",
+      status: "COMPLETED",
+      subtotalAmount: "39.80",
+      itemCount: 2,
+      createdAt: "2026-06-24T01:00:00.000Z"
+    });
+
+    renderRole("MEMBER");
+    expect(await screen.findByRole("heading", { name: "订单列表" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "去支付" }));
     await waitFor(() => {
       expect(mockedPayOrder).toHaveBeenCalledWith("MO6f5a1954726111f193440afda4b47e66", "csrf-token");
@@ -705,6 +816,31 @@ describe("RolePage 商户入驻区块", () => {
     });
   });
 
+  it("店主商品列表读取失败时仍可选择已读取分类", async () => {
+    mockedListPublicCategories.mockResolvedValue([{
+      id: "1",
+      name: "新鲜水果",
+      description: "当季水果",
+      status: "ACTIVE",
+      createdAt: "2026-06-24T01:00:00.000Z",
+      updatedAt: "2026-06-24T01:00:00.000Z"
+    }]);
+    mockedListOwnerProducts.mockRejectedValue(new Error("owner products failed"));
+
+    render(
+      <MemoryRouter>
+        <OwnerProductPanel />
+      </MemoryRouter>
+    );
+
+    const categorySelect = await screen.findByLabelText("商品分类");
+
+    await waitFor(() => {
+      expect(categorySelect).not.toBeDisabled();
+    });
+    expect(categorySelect).toHaveValue("1");
+  });
+
   it("店主订单履约面板只对待发货子订单显示发货按钮", async () => {
     mockedGetOwnerShop.mockResolvedValue({
       id: "3",
@@ -771,12 +907,27 @@ describe("RolePage 商户入驻区块", () => {
 
     renderRole("ADMIN");
 
-    expect(await screen.findByRole("heading", { name: "数据库证据总览" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "审计日志" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "审计日志" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "有效销量 Top 10" })).toBeInTheDocument();
     expect(screen.getByText("shop_orders")).toBeInTheDocument();
     expect(screen.getByText("高山苹果")).toBeInTheDocument();
     expect(screen.queryByLabelText(/SQL/i)).not.toBeInTheDocument();
+  });
+
+  it("管理员数据库证据面板不展示总览摘要区", async () => {
+    mockedListAuditLogs.mockResolvedValue([]);
+    mockedListTopProducts.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter>
+        <AdminDatabaseEvidencePanel />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: "审计日志" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "有效销量 Top 10" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "数据库证据总览" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("数据库证据摘要")).not.toBeInTheDocument();
   });
 });
 

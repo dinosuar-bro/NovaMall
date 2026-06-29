@@ -65,9 +65,20 @@ describe("商品目录合同", () => {
       sort: "relevance"
     }).sort).toBe("relevance");
     expect(publicProductListSchema.parse({
-      data: [],
+      data: [{
+        id: "10",
+        name: "Stage6性能商品",
+        description: "阶段六性能测试商品",
+        price: "19.90",
+        stock: 20,
+        mainImagePath: "/uploads/products/stage6-performance.png",
+        category: { id: "1", name: "性能分类" },
+        shop: { id: "1", name: "共享商品池" },
+        createdAt: "2026-06-24T01:00:00.000Z",
+        updatedAt: "2026-06-24T01:00:00.000Z"
+      }],
       meta: { page: 1, pageSize: 12, total: 0 }
-    }).meta.total).toBe(0);
+    }).data[0]?.mainImagePath).toBe("/uploads/products/stage6-performance.png");
   });
 
   it("校验上传响应和阶段 3 错误码", () => {

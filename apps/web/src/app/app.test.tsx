@@ -192,6 +192,25 @@ describe("App 路由守卫", () => {
     expect(screen.queryByText(/request-789/)).not.toBeInTheDocument();
   });
 
+  it("注册页在手机号格式错误时立即标红并阻止提交", async () => {
+    renderApp("/register");
+    await screen.findByText("安全会话已准备好。");
+    const phoneInput = screen.getByLabelText("手机号");
+
+    fireFormInput("用户名", "test123");
+    fireEvent.change(phoneInput, { target: { value: "12312341234" } });
+    fireFormInput("密码", "Password123");
+    fireFormInput("确认密码", "Password123");
+    const registerButton = screen.getByRole("button", { name: "注册并进入会员首页" });
+
+    expect(phoneInput).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("请输入 1 开头的 11 位有效手机号。")).toHaveClass("field-error");
+    expect(registerButton).toBeDisabled();
+    fireEvent.click(registerButton);
+    expect(mockedRegister).not.toHaveBeenCalled();
+    expect(screen.queryByText("注册失败，请稍后重试。")).not.toBeInTheDocument();
+  });
+
   it("注册页不要求展示名，提交时只发送账号、手机号和密码", async () => {
     mockedRegister.mockResolvedValue({
       user: {
@@ -354,7 +373,7 @@ describe("App 路由守卫", () => {
     expect(await screen.findByRole("heading", { level: 2, name: "开店申请" })).toBeInTheDocument();
   });
 
-  it("会员侧边栏可进入购物车与订单", async () => {
+  it("会员侧边栏可分别进入购物车和订单列表", async () => {
     mockedGetCurrentSession.mockResolvedValue({
       user: {
         id: "1",
@@ -367,9 +386,12 @@ describe("App 路由守卫", () => {
 
     renderApp("/member/catalog");
     expect(await screen.findByRole("heading", { level: 2, name: "商品目录" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("link", { name: "购物车与订单" }));
+    fireEvent.click(screen.getByRole("link", { name: "购物车" }));
 
-    expect(await screen.findByRole("heading", { level: 2, name: "购物车与订单" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "购物车" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "订单列表" }));
+
+    expect(await screen.findByRole("heading", { level: 2, name: "订单列表" })).toBeInTheDocument();
   });
 
   it("店主和管理员侧边栏包含阶段 5 演示入口", async () => {
@@ -384,6 +406,7 @@ describe("App 路由守卫", () => {
     });
     renderApp("/owner/products");
     expect(await screen.findByRole("link", { name: "订单履约" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "店铺资料" })).not.toBeInTheDocument();
 
     cleanup();
     mockedGetCurrentSession.mockResolvedValueOnce({

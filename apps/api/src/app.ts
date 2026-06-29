@@ -32,6 +32,16 @@ export function createApp(dependencies: AppDependencies): Express {
 
   app.use(express.json());
   app.use(requestContext);
+  app.use((request, response, next) => {
+    if (request.path.startsWith("/api/v1/uploads")) {
+      next();
+      return;
+    }
+    response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    response.setHeader("Pragma", "no-cache");
+    response.setHeader("Expires", "0");
+    next();
+  });
   if (
     dependencies.authRepository !== undefined
     && dependencies.sessionStore !== undefined

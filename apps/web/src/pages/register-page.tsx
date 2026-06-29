@@ -13,10 +13,12 @@ export function RegisterPage() {
   const [csrfToken, setCsrfToken] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("正在准备安全会话…");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmedPassword, setConfirmedPassword] = useState("");
   const [passwordTouched, setPasswordTouched] = useState(false);
   const [confirmedPasswordTouched, setConfirmedPasswordTouched] = useState(false);
+  const phoneError = phone.length > 0 && !isValidPhone(phone.trim()) ? phoneRuleMessage : undefined;
   const passwordError = passwordTouched && !isStrongPassword(password) ? passwordRuleMessage : undefined;
   const confirmedPasswordError = confirmedPasswordTouched && confirmedPassword !== password ? passwordMismatchMessage : undefined;
 
@@ -52,12 +54,17 @@ export function RegisterPage() {
       setMessage(passwordRuleMessage);
       return;
     }
+    const submittedPhone = phone.trim();
+    if (!isValidPhone(submittedPhone)) {
+      setMessage(phoneRuleMessage);
+      return;
+    }
     setLoading(true);
     try {
       await register({
         username: formValue(formData, "username").trim(),
         password,
-        phone: formValue(formData, "phone").trim()
+        phone: submittedPhone
       }, csrfToken);
       void navigate("/member/catalog");
     } catch (error) {
@@ -71,7 +78,16 @@ export function RegisterPage() {
     <AuthShell title="成为星选会员" description="留下基础资料，系统会自动授予 MEMBER 角色。">
       <form className="form-stack" onSubmit={(event) => { void handleSubmit(event); }}>
         <Field label="用户名" name="username" help="3–50 位英文、数字或下划线" autoComplete="username" />
-        <Field label="手机号" name="phone" inputMode="tel" autoComplete="tel" help="手机号将使用 AES 加密保存" />
+        <Field
+          label="手机号"
+          name="phone"
+          inputMode="tel"
+          autoComplete="tel"
+          value={phone}
+          onChange={(event) => { setPhone(event.target.value); }}
+          help="手机号将使用 AES 加密保存"
+          error={phoneError}
+        />
         <Field
           label="密码"
           name="password"
@@ -93,7 +109,7 @@ export function RegisterPage() {
           onBlur={() => { setConfirmedPasswordTouched(true); }}
           error={confirmedPasswordError}
         />
-        <Button type="submit" loading={loading} disabled={csrfToken.length === 0}>注册并进入会员首页</Button>
+        <Button type="submit" loading={loading} disabled={csrfToken.length === 0 || !isValidPhone(phone.trim())}>注册并进入会员首页</Button>
         <StatusMessage>{message}</StatusMessage>
         <span>已有账号？<Link to="/login">返回登录</Link></span>
       </form>
@@ -103,6 +119,7 @@ export function RegisterPage() {
 
 const passwordRuleMessage = "密码至少 8 位，并包含英文大写、小写和数字。";
 const passwordMismatchMessage = "两次输入的密码不一致。";
+const phoneRuleMessage = "请输入 1 开头的 11 位有效手机号。";
 
 function registerErrorMessage(error: unknown): string {
   if (error instanceof ApiClientError) {
@@ -125,6 +142,10 @@ function isUsernameTakenMessage(message: string): boolean {
 
 function isStrongPassword(password: string): boolean {
   return password.length >= 8 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password);
+}
+
+function isValidPhone(phone: string): boolean {
+  return /^1[3-9]\d{9}$/.test(phone);
 }
 
 function formValue(formData: FormData, name: string): string {

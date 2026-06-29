@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const idStringSchema = z.string().regex(/^\d+$/);
 const moneyStringSchema = z.string().regex(/^\d+\.\d{2}$/);
-const uploadPathSchema = z.string().regex(/^\/uploads\/products\/\d{4}\/\d{2}\/[^/]+\.(jpg|jpeg|png|webp)$/);
+const uploadPathSchema = z.string().regex(/^\/uploads\/products\/(?:\d{4}\/\d{2}\/[^/]+|[^/]+)\.(jpg|jpeg|png|webp)$/);
 
 export const categoryStatusSchema = z.enum(["ACTIVE", "DISABLED"]);
 export const productStatusSchema = z.enum(["DRAFT", "PUBLISHED", "UNPUBLISHED", "ARCHIVED"]);

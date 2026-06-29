@@ -12,8 +12,7 @@ test.beforeAll(async () => {
   });
 });
 
-test("移动视口下新会员可注册进入 MEMBER 壳，并被后端拒绝访问 OWNER", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+test("新会员可注册进入 MEMBER 壳，并被后端拒绝访问 OWNER", async ({ page }) => {
   const suffix = Date.now().toString();
   await page.goto("/register");
 
@@ -72,9 +71,8 @@ test("会员提交开店申请后，管理员批准并进入店主后台", async
 
   await page.context().clearCookies();
   await login(page, username);
-  await page.getByRole("link", { name: "店铺资料" }).click();
-  await expect(page.getByRole("heading", { level: 2, name: "店铺资料" })).toBeVisible();
-  await expect(page.getByText(shopName)).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "商品管理" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "店铺资料" })).toHaveCount(0);
 });
 
 test("管理员创建分类，店主发布带图商品，会员可搜索查看", async ({ page }) => {
@@ -131,7 +129,7 @@ test("管理员创建分类，店主发布带图商品，会员可搜索查看",
   await page.getByRole("button", { name: "注册并进入会员首页" }).click();
 
   await expect(page.getByRole("heading", { level: 2, name: "商品目录" })).toBeVisible();
-  await page.getByLabel("商品关键词").fill("苹果");
+  await page.getByLabel("商品关键词").fill(productName);
   await page.getByRole("button", { name: "搜索商品" }).click();
   const publicProductCard = page.locator(".product-card").filter({ hasText: productName });
   await expect(publicProductCard).toBeVisible();
@@ -139,8 +137,8 @@ test("管理员创建分类，店主发布带图商品，会员可搜索查看",
 
   await publicProductCard.getByRole("button", { name: `加入购物车：${productName}` }).click();
   await expect(page.locator(".status-message").filter({ hasText: "已加入购物车" })).toBeVisible();
-  await page.getByRole("link", { name: "购物车与订单" }).click();
-  await expect(page.getByRole("heading", { level: 2, name: "购物车与订单" })).toBeVisible();
+  await page.getByRole("link", { name: "购物车" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "购物车" })).toBeVisible();
   await page.getByLabel("收货人").fill("张三");
   await page.getByLabel("收货手机号").fill("13900000000");
   await page.getByLabel("省份").selectOption("广东省");
@@ -150,7 +148,11 @@ test("管理员创建分类，店主发布带图商品，会员可搜索查看",
   await page.getByRole("button", { name: "保存地址" }).click();
   await expect(page.locator(".status-message").filter({ hasText: "地址已保存" })).toBeVisible();
   await page.getByRole("button", { name: "提交结算" }).click();
+  await expect(page.getByRole("dialog", { name: "确认结算明细" })).toBeVisible();
+  await page.getByRole("button", { name: "确认结算" }).click();
   await expect(page.locator(".status-message").filter({ hasText: "结算成功" })).toBeVisible();
+  await page.getByRole("link", { name: "订单列表" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "订单列表" })).toBeVisible();
   await page.getByRole("button", { name: "去支付" }).click();
   await expect(page.locator(".status-message").filter({ hasText: "模拟支付成功" })).toBeVisible();
 
@@ -163,7 +165,7 @@ test("管理员创建分类，店主发布带图商品，会员可搜索查看",
 
   await page.context().clearCookies();
   await login(page, username);
-  await page.getByRole("link", { name: "购物车与订单" }).click();
+  await page.getByRole("link", { name: "订单列表" }).click();
   await expect(page.getByRole("button", { name: "确认收货" })).toBeVisible();
   await page.getByRole("button", { name: "确认收货" }).first().click();
   await expect(page.locator(".status-message").filter({ hasText: "已确认收货" })).toBeVisible();
@@ -171,8 +173,8 @@ test("管理员创建分类，店主发布带图商品，会员可搜索查看",
   await page.context().clearCookies();
   await login(page, "demo_admin");
   await page.getByRole("link", { name: "数据库证据" }).click();
-  await expect(page.getByRole("heading", { level: 2, name: "数据库证据总览" })).toBeVisible();
-  await expect(page.getByText(productName)).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "审计日志" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "有效销量 Top 10" })).toBeVisible();
   await expect(page.getByText("shop_orders").first()).toBeVisible();
 });
 

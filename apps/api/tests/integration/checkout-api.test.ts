@@ -342,6 +342,87 @@ describe("结算与数据库核心 API", () => {
     });
   });
 
+  it("Top 10 在销量并列时按销售额降序排序", async () => {
+    const admin = await createUser("top_sort_admin", ["ADMIN"]);
+    const member = await createUser("top_sort_member");
+    const owner = await createOwner("top_sort_owner", "排序店");
+    const categoryId = await createCategory("排序分类");
+    const { agent: adminAgent } = await loginAgent(admin.username);
+    const { agent: memberAgent, csrfToken } = await loginAgent(member.username);
+    const addressId = await createAddress(memberAgent, csrfToken);
+
+    await pool.execute(
+      `INSERT INTO products (id, shop_id, category_id, name, description, price, stock, main_image_path, status)
+       VALUES
+         (99, ?, ?, '并列商品 99', '销量并列排序测试', '10.00', 10, '/uploads/products/2026/06/test.png', 'PUBLISHED'),
+         (100, ?, ?, '并列商品 100', '销量并列排序测试', '10.00', 10, '/uploads/products/2026/06/test.png', 'PUBLISHED'),
+         (1000, ?, ?, '并列商品 1000', '销量并列排序测试', '10.00', 10, '/uploads/products/2026/06/test.png', 'PUBLISHED')`,
+      [owner.shopId, categoryId, owner.shopId, categoryId, owner.shopId, categoryId]
+    );
+    await pool.execute(
+      `INSERT INTO master_orders (
+         order_no,
+         buyer_user_id,
+         address_id,
+         checkout_token,
+         total_amount,
+         status,
+         receiver_name,
+         receiver_phone_cipher,
+         receiver_phone_iv,
+         address_snapshot,
+         paid_at
+       )
+       SELECT
+         'TOPSORT-MO-1',
+         ?,
+         a.id,
+         '66666666-6666-4666-8666-666666666666',
+         '150.00',
+         'PAID',
+         a.receiver_name,
+         a.receiver_phone_cipher,
+         a.receiver_phone_iv,
+         JSON_OBJECT('province', a.province, 'city', a.city, 'district', a.district, 'detail', a.detail),
+         NOW(3)
+       FROM addresses a
+       WHERE a.id = ?`,
+      [member.id, addressId]
+    );
+    const [shopOrderResult] = await pool.execute<ResultSetHeader>(
+      `INSERT INTO shop_orders (master_order_id, shop_id, shop_order_no, subtotal_amount, status, paid_at)
+       SELECT id, ?, 'TOPSORT-SO-1', '150.00', 'PENDING_SHIPMENT', NOW(3)
+       FROM master_orders
+       WHERE order_no = 'TOPSORT-MO-1'`,
+      [owner.shopId]
+    );
+    await pool.execute(
+      `INSERT INTO order_items (
+         shop_order_id,
+         product_id,
+         product_name,
+         product_main_image_path,
+         unit_price,
+         quantity,
+         line_amount
+       )
+       VALUES
+         (?, 99, '并列商品 99', '/uploads/products/2026/06/test.png', '10.00', 5, '50.00'),
+         (?, 100, '并列商品 100', '/uploads/products/2026/06/test.png', '14.00', 5, '70.00'),
+         (?, 1000, '并列商品 1000', '/uploads/products/2026/06/test.png', '12.00', 5, '60.00')`,
+      [shopOrderResult.insertId, shopOrderResult.insertId, shopOrderResult.insertId]
+    );
+
+    await adminAgent.get("/api/v1/admin/database/top-products").expect(200).expect((response) => {
+      const data = readData(response.body);
+      expect(data).toEqual([
+        expect.objectContaining({ productId: "100", soldQuantity: 5, salesAmount: "70.00", salesRank: 1 }),
+        expect.objectContaining({ productId: "1000", soldQuantity: 5, salesAmount: "60.00", salesRank: 2 }),
+        expect.objectContaining({ productId: "99", soldQuantity: 5, salesAmount: "50.00", salesRank: 3 })
+      ]);
+    });
+  });
+
   it("店主可发货本店子订单，会员可确认收货并完成总订单", async () => {
     const admin = await createUser("fulfillment_admin", ["ADMIN"]);
     const member = await createUser("fulfillment_member");

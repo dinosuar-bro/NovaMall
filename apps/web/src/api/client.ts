@@ -63,6 +63,21 @@ import {
 import { z } from "zod";
 
 const API_PREFIX = "/api/v1";
+const csrfCacheTtlMs = 1000;
+
+interface CsrfState {
+  request: Promise<string> | null;
+  tokenCache: { token: string; cachedAt: number } | null;
+}
+
+declare global {
+  var __novamallCsrfState: CsrfState | undefined;
+}
+
+const csrfState = globalThis.__novamallCsrfState ??= {
+  request: null,
+  tokenCache: null
+};
 
 export class ApiClientError extends Error {
   constructor(readonly code: string, message: string, readonly requestId?: string) {
@@ -72,9 +87,19 @@ export class ApiClientError extends Error {
 }
 
 export async function fetchCsrf(): Promise<string> {
-  const response = await request("/auth/csrf", { method: "GET", cache: "no-store" });
-  const parsed = successResponseSchema(authSessionDataSchema.pick({ csrfToken: true })).parse(response);
-  return parsed.data.csrfToken;
+  if (csrfState.tokenCache !== null && Date.now() - csrfState.tokenCache.cachedAt < csrfCacheTtlMs) {
+    return csrfState.tokenCache.token;
+  }
+  csrfState.request ??= request("/auth/csrf", { method: "GET", cache: "no-store" })
+    .then((response) => {
+      const token = successResponseSchema(authSessionDataSchema.pick({ csrfToken: true })).parse(response).data.csrfToken;
+      csrfState.tokenCache = { token, cachedAt: Date.now() };
+      return token;
+    })
+    .finally(() => {
+      csrfState.request = null;
+    });
+  return csrfState.request;
 }
 
 export async function register(input: RegisterInput, csrfToken: string): Promise<AuthSessionData> {
@@ -325,7 +350,9 @@ export async function listTopProducts(): Promise<TopProduct[]> {
 
 async function writeAuth(path: string, body: RegisterInput | LoginInput, csrfToken: string): Promise<AuthSessionData> {
   const response = await writeJson(path, "POST", body, csrfToken);
-  return successResponseSchema(authSessionDataSchema).parse(response).data;
+  const session = successResponseSchema(authSessionDataSchema).parse(response).data;
+  csrfState.tokenCache = { token: session.csrfToken, cachedAt: Date.now() };
+  return session;
 }
 
 async function writeJson(path: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body: object, csrfToken: string): Promise<unknown> {

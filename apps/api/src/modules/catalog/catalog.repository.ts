@@ -201,18 +201,15 @@ export class CatalogRepository {
     return product;
   }
 
-  async listOwnerProducts(ownerUserId: string, query: PaginationQuery): Promise<PaginatedOwnerProducts> {
-    const shopId = await this.findOwnerShopId(ownerUserId);
+  async listOwnerProducts(_ownerUserId: string, query: PaginationQuery): Promise<PaginatedOwnerProducts> {
     const [countRows] = await this.pool.query<CountRow[]>(
-      "SELECT COUNT(*) AS total FROM products WHERE shop_id = ?",
-      [shopId]
+      "SELECT COUNT(*) AS total FROM products"
     );
     const [rows] = await this.pool.query<OwnerProductRow[]>(
       `${ownerProductSelectSql}
-       WHERE p.shop_id = ?
        ORDER BY p.updated_at DESC, p.id DESC
        LIMIT ? OFFSET ?`,
-      [shopId, query.pageSize, (query.page - 1) * query.pageSize]
+      [query.pageSize, (query.page - 1) * query.pageSize]
     );
     return {
       data: rows.map(mapOwnerProduct),
@@ -220,12 +217,11 @@ export class CatalogRepository {
     };
   }
 
-  async findOwnerProduct(ownerUserId: string, productId: string): Promise<OwnerProduct | null> {
-    const shopId = await this.findOwnerShopId(ownerUserId);
+  async findOwnerProduct(_ownerUserId: string, productId: string): Promise<OwnerProduct | null> {
     const [rows] = await this.pool.query<OwnerProductRow[]>(
       `${ownerProductSelectSql}
-       WHERE p.id = ? AND p.shop_id = ?`,
-      [productId, shopId]
+       WHERE p.id = ?`,
+      [productId]
     );
     return rows[0] === undefined ? null : mapOwnerProduct(rows[0]);
   }
@@ -240,7 +236,7 @@ export class CatalogRepository {
     try {
       await connection.beginTransaction();
       await setAuditContext(connection, ownerUserId, requestId);
-      const state = await this.findOwnerProductStateForUpdate(connection, ownerUserId, productId);
+      const state = await this.findOwnerProductStateForUpdate(connection, productId);
       if (state.status === "ARCHIVED") {
         throw new AppError(409, "PRODUCT_STATE_CONFLICT", "归档商品不能编辑");
       }
@@ -278,20 +274,19 @@ export class CatalogRepository {
     input: OwnerProductStockInput,
     requestId: string
   ): Promise<OwnerProduct> {
-    const shopId = await this.findOwnerShopId(ownerUserId);
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
       await setAuditContext(connection, ownerUserId, requestId);
-      const state = await this.findOwnerProductStateForUpdate(connection, ownerUserId, productId);
+      const state = await this.findOwnerProductStateForUpdate(connection, productId);
       if (state.status === "ARCHIVED") {
         throw new AppError(409, "PRODUCT_STATE_CONFLICT", "归档商品不能调整库存");
       }
       const [result] = await connection.execute<ResultSetHeader>(
         `UPDATE products
             SET stock = ?, version = version + 1
-          WHERE id = ? AND shop_id = ? AND version = ?`,
-        [input.stock, productId, shopId, input.version]
+          WHERE id = ? AND version = ?`,
+        [input.stock, productId, input.version]
       );
       if (result.affectedRows !== 1) {
         throw new AppError(409, "PRODUCT_VERSION_CONFLICT", "商品版本已变化，请刷新后重试");
@@ -321,7 +316,7 @@ export class CatalogRepository {
     try {
       await connection.beginTransaction();
       await setAuditContext(connection, ownerUserId, requestId);
-      const state = await this.findOwnerProductStateForUpdate(connection, ownerUserId, productId);
+      const state = await this.findOwnerProductStateForUpdate(connection, productId);
       if (nextStatus === "PUBLISHED") {
         if (state.status !== "DRAFT" && state.status !== "UNPUBLISHED") {
           throw new AppError(409, "PRODUCT_STATE_CONFLICT", "当前商品状态不能上架");
@@ -467,16 +462,14 @@ export class CatalogRepository {
 
   private async findOwnerProductStateForUpdate(
     connection: PoolConnection,
-    ownerUserId: string,
     productId: string
   ): Promise<ProductStateRow> {
-    const shopId = await this.findOwnerShopId(ownerUserId);
     const [rows] = await connection.query<ProductStateRow[]>(
       `SELECT CAST(id AS CHAR) AS id, status, CAST(category_id AS CHAR) AS category_id, main_image_path
          FROM products
-        WHERE id = ? AND shop_id = ?
+        WHERE id = ?
         FOR UPDATE`,
-      [productId, shopId]
+      [productId]
     );
     const row = rows[0];
     if (row === undefined) {

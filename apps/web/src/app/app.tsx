@@ -32,7 +32,8 @@ export function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/member" element={<ProtectedRedirect role="MEMBER" to="/member/catalog" />} />
       <Route path="/member/catalog" element={<ProtectedPage role="MEMBER" title="商品目录"><MemberCatalogPanel /></ProtectedPage>} />
-      <Route path="/member/orders" element={<ProtectedPage role="MEMBER" title="购物车与订单"><MemberCartOrdersPanel /></ProtectedPage>} />
+      <Route path="/member/cart" element={<ProtectedPage role="MEMBER" title="购物车"><MemberCartOrdersPanel view="cart" /></ProtectedPage>} />
+      <Route path="/member/orders" element={<ProtectedPage role="MEMBER" title="订单列表"><MemberCartOrdersPanel view="orders" /></ProtectedPage>} />
       <Route path="/member/applications" element={<ProtectedPage role="MEMBER" title="开店申请"><MemberMerchantApplicationPanel /></ProtectedPage>} />
       <Route path="/owner" element={<ProtectedRedirect role="OWNER" to="/owner/products" />} />
       <Route path="/owner/shop" element={<ProtectedPage role="OWNER" title="店铺资料"><OwnerShopPanel /></ProtectedPage>} />
@@ -141,14 +142,14 @@ export function RoleNav({ role }: { role: RoleCode }) {
       {role === "MEMBER" ? (
         <>
           <NavLink to="/member/catalog">商品目录</NavLink>
-          <NavLink to="/member/orders">购物车与订单</NavLink>
+          <NavLink to="/member/cart">购物车</NavLink>
+          <NavLink to="/member/orders">订单列表</NavLink>
         </>
       ) : null}
       {role === "OWNER" ? (
         <>
           <NavLink to="/owner/products">商品管理</NavLink>
           <NavLink to="/owner/orders">订单履约</NavLink>
-          <NavLink to="/owner/shop">店铺资料</NavLink>
         </>
       ) : null}
       {role === "ADMIN" ? (

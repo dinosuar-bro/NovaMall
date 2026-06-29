@@ -237,7 +237,7 @@ describe("商品目录 API", () => {
     expect(auditRows[0]?.count).toBeGreaterThan(0);
   });
 
-  it("拒绝跨店访问、非法状态迁移和过期库存版本", async () => {
+  it("店主共享全部商品，同时拒绝非法状态迁移和过期库存版本", async () => {
     const admin = await createUser("catalog_admin_owner_guard", ["ADMIN"]);
     const owner = await createOwner("catalog_owner_guard", "苹果店");
     const otherOwner = await createOwner("catalog_other_owner_guard", "梨子店");
@@ -247,7 +247,9 @@ describe("商品目录 API", () => {
     const categoryId = await createCategory(adminSession.agent, adminSession.csrfToken);
     const productId = await createDraftProduct(ownerSession.agent, ownerSession.csrfToken, categoryId);
 
-    await otherOwnerSession.agent.get(`/api/v1/owner/products/${productId}`).expect(404);
+    await otherOwnerSession.agent.get(`/api/v1/owner/products/${productId}`).expect(200).expect((response) => {
+      expect(readData(response.body)).toEqual(expect.objectContaining({ id: productId }));
+    });
     await ownerSession.agent
       .post(`/api/v1/owner/products/${productId}/unpublish`)
       .set("X-CSRF-Token", ownerSession.csrfToken)

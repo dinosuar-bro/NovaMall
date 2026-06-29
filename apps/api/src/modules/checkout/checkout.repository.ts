@@ -490,7 +490,9 @@ export class CheckoutRepository {
              product_name,
              sold_quantity,
              sales_amount,
-             ROW_NUMBER() OVER (ORDER BY sold_quantity DESC, product_id ASC) AS sales_rank
+             ROW_NUMBER() OVER (
+               ORDER BY sold_quantity DESC, CAST(sales_amount AS DECIMAL(12,2)) DESC, CAST(product_id AS UNSIGNED) ASC
+             ) AS sales_rank
            FROM v_effective_product_sales
          ) ranked
        WHERE sales_rank <= 10

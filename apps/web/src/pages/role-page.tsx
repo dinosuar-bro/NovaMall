@@ -1,5 +1,5 @@
 import { Link, NavLink } from "react-router-dom";
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import type {
   Address,
   AuditLog,
@@ -28,6 +28,7 @@ import {
   createAddress,
   createCategory,
   createOwnerProduct,
+  deleteCartItem,
   fetchCsrf,
   getCart,
   getMyMerchantApplication,
@@ -49,6 +50,7 @@ import {
   rejectMerchantApplication,
   shipShopOrder,
   submitMerchantApplication,
+  updateCartItem,
   uploadProductImage
 } from "../api/client.js";
 
@@ -129,37 +131,42 @@ export function MemberCatalogPanel({ csrfToken: initialCsrfToken = "" }: { csrfT
   const [categoryId, setCategoryId] = useState("");
   const [message, setMessage] = useState("正在读取商品目录…");
   const [addingProductId, setAddingProductId] = useState<string | null>(null);
+  const [addedProductId, setAddedProductId] = useState<string | null>(null);
+  const addedResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function refresh(nextKeyword = keyword, nextCategoryId = categoryId): Promise<void> {
+    const productResult = await listPublicProducts({
+      keyword: nextKeyword,
+      categoryId: nextCategoryId,
+      sort: nextKeyword.trim().length > 0 ? "relevance" : "newest"
+    });
+    setProducts(productResult.data);
+    setMessage(productResult.meta.total === 0 ? "暂无可展示商品。" : `共 ${productResult.meta.total} 件商品。`);
     try {
-      const [nextCategories, productResult] = await Promise.all([
-        listPublicCategories(),
-        listPublicProducts({
-          keyword: nextKeyword,
-          categoryId: nextCategoryId,
-          sort: nextKeyword.trim().length > 0 ? "relevance" : "newest"
-        })
-      ]);
+      const nextCategories = await listPublicCategories();
       setCategories(nextCategories);
-      setProducts(productResult.data);
+    } catch {
       setMessage(productResult.meta.total === 0 ? "暂无可展示商品。" : `共 ${productResult.meta.total} 件商品。`);
-    } catch (error) {
-      setMessage(errorMessage(error, "暂时无法读取商品目录。"));
     }
   }
 
   useEffect(() => {
     let alive = true;
     const tokenPromise = initialCsrfToken.length > 0 ? Promise.resolve(initialCsrfToken) : fetchCsrf();
-    void Promise.all([
-      tokenPromise,
-      listPublicCategories(),
-      listPublicProducts({ sort: "newest" })
-    ])
-      .then(([token, nextCategories, productResult]) => {
+    void tokenPromise
+      .then((token) => {
         if (alive) {
           setCsrfToken(token);
-          setCategories(nextCategories);
+        }
+      })
+      .catch((error) => {
+        if (alive) {
+          setMessage(errorMessage(error, "暂时无法读取安全令牌。"));
+        }
+      });
+    void listPublicProducts({ sort: "newest" })
+      .then((productResult) => {
+        if (alive) {
           setProducts(productResult.data);
           setMessage(productResult.meta.total === 0 ? "暂无可展示商品。" : `共 ${productResult.meta.total} 件商品。`);
         }
@@ -169,10 +176,29 @@ export function MemberCatalogPanel({ csrfToken: initialCsrfToken = "" }: { csrfT
           setMessage(errorMessage(error, "暂时无法读取商品目录。"));
         }
       });
+    void listPublicCategories()
+      .then((nextCategories) => {
+        if (alive) {
+          setCategories(nextCategories);
+        }
+      })
+      .catch((error) => {
+        if (alive) {
+          setMessage(errorMessage(error, "暂时无法读取分类。"));
+        }
+      });
     return () => {
       alive = false;
     };
   }, [initialCsrfToken]);
+
+  useEffect(() => {
+    return () => {
+      if (addedResetTimerRef.current !== null) {
+        clearTimeout(addedResetTimerRef.current);
+      }
+    };
+  }, []);
 
   function submitSearch(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -187,7 +213,15 @@ export function MemberCatalogPanel({ csrfToken: initialCsrfToken = "" }: { csrfT
     setAddingProductId(product.id);
     try {
       await addCartItem({ productId: product.id, quantity: 1 }, csrfToken);
-      setMessage("已加入购物车。");
+      setMessage(`已加入购物车：${product.name} x1`);
+      setAddedProductId(product.id);
+      if (addedResetTimerRef.current !== null) {
+        clearTimeout(addedResetTimerRef.current);
+      }
+      addedResetTimerRef.current = setTimeout(() => {
+        setAddedProductId(null);
+        addedResetTimerRef.current = null;
+      }, 900);
     } catch (error) {
       setMessage(errorMessage(error, "加入购物车失败。"));
     } finally {
@@ -216,7 +250,7 @@ export function MemberCatalogPanel({ csrfToken: initialCsrfToken = "" }: { csrfT
       </form>
       <div className="product-grid">
         {products.map((product) => (
-          <article className="product-card" key={product.id}>
+          <article className={`product-card${addedProductId === product.id ? " product-card--added" : ""}`} key={product.id}>
             <img
               src={productImageSrc(product.mainImagePath)}
               alt={product.name}
@@ -238,6 +272,7 @@ export function MemberCatalogPanel({ csrfToken: initialCsrfToken = "" }: { csrfT
               <Button
                 variant="secondary"
                 loading={addingProductId === product.id}
+                disabled={csrfToken.length === 0}
                 onClick={() => { void addProduct(product); }}
               >
                 加入购物车：{product.name}
@@ -251,19 +286,23 @@ export function MemberCatalogPanel({ csrfToken: initialCsrfToken = "" }: { csrfT
   );
 }
 
-export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { csrfToken?: string }) {
+type MemberCartOrdersView = "cart" | "orders" | "all";
+
+export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "", view = "all" }: { csrfToken?: string; view?: MemberCartOrdersView }) {
   const initialRegion = defaultRegion();
   const [csrfToken, setCsrfToken] = useState(initialCsrfToken);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [cart, setCart] = useState<Cart>({ items: [], totalAmount: "0.00" });
   const [orders, setOrders] = useState<MemberOrder[]>([]);
   const [shopOrders, setShopOrders] = useState<ShopOrder[]>([]);
+  const [quantityEdits, setQuantityEdits] = useState<Record<string, string>>({});
   const [selectedAddressId, setSelectedAddressId] = useState("");
   const [receiverPhone, setReceiverPhone] = useState("");
   const [selectedProvince, setSelectedProvince] = useState(initialRegion.province);
   const [selectedCity, setSelectedCity] = useState(initialRegion.city);
   const [selectedDistrict, setSelectedDistrict] = useState(initialRegion.district);
   const [loading, setLoading] = useState(false);
+  const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [message, setMessage] = useState("正在读取购物车与订单…");
   const provinceOptions = listProvinces();
   const cityOptions = listCities(selectedProvince);
@@ -278,6 +317,7 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
     ]);
     setAddresses(nextAddresses);
     setCart(nextCart);
+    setQuantityEdits(cartQuantityState(nextCart));
     setOrders(nextOrders);
     setShopOrders(nextShopOrders);
     setSelectedAddressId((current) => current || nextAddresses.find((address) => address.isDefault)?.id || nextAddresses[0]?.id || "");
@@ -294,6 +334,7 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
           setReceiverPhone(profile.phone);
           setAddresses(nextAddresses);
           setCart(nextCart);
+          setQuantityEdits(cartQuantityState(nextCart));
           setOrders(nextOrders);
           setShopOrders(nextShopOrders);
           setSelectedAddressId(nextAddresses.find((address) => address.isDefault)?.id || nextAddresses[0]?.id || "");
@@ -345,12 +386,65 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
     setLoading(true);
     try {
       const result = await checkoutCart({ addressId: selectedAddressId, checkoutToken: newCheckoutToken() }, csrfToken);
+      setCheckoutDialogOpen(false);
       await refresh(`结算成功，订单 ${displayOrderCode("主订单", result.orderNo)} 已创建。`);
     } catch (error) {
       setMessage(errorMessage(error, "结算失败。"));
     } finally {
       setLoading(false);
     }
+  }
+
+  async function updateQuantity(item: Cart["items"][number]): Promise<void> {
+    const itemId = item.id;
+    const quantity = Number(quantityEdits[itemId]);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+      setMessage("商品数量必须是 1 到 99 的整数。");
+      setQuantityEdits(cartQuantityState(cart));
+      return;
+    }
+    if (quantity > item.stock) {
+      setMessage(`库存不足，${item.productName} 当前最多可购买 ${item.stock} 件。`);
+      setQuantityEdits(cartQuantityState(cart));
+      return;
+    }
+    if (quantity === item.quantity) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const nextCart = await updateCartItem(itemId, { quantity }, csrfToken);
+      setCart(nextCart);
+      setQuantityEdits(cartQuantityState(nextCart));
+      setMessage(`${item.productName} 数量已更新。`);
+    } catch (error) {
+      setQuantityEdits(cartQuantityState(cart));
+      setMessage(errorMessage(error, "数量更新失败，请确认库存是否充足后再试。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function removeItem(itemId: string, productName: string): Promise<void> {
+    setLoading(true);
+    try {
+      const nextCart = await deleteCartItem(itemId, csrfToken);
+      setCart(nextCart);
+      setQuantityEdits(cartQuantityState(nextCart));
+      setMessage(`${productName} 已从购物车删除。`);
+    } catch (error) {
+      setMessage(errorMessage(error, "删除购物车商品失败。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function requestCheckout(): void {
+    if (selectedAddressId.length === 0) {
+      setMessage("请先保存或选择收货地址。");
+      return;
+    }
+    setCheckoutDialogOpen(true);
   }
 
   async function pay(orderNo: string): Promise<void> {
@@ -380,132 +474,198 @@ export function MemberCartOrdersPanel({ csrfToken: initialCsrfToken = "" }: { cs
   return (
     <section className="stage-panel" aria-labelledby="member-cart-orders-title">
       <div className="section-heading">
-        <h2 id="member-cart-orders-title">购物车与订单</h2>
+        <h2 id="member-cart-orders-title">{view === "orders" ? "订单列表" : "购物车"}</h2>
       </div>
-      <form className="form-grid" onSubmit={(event) => { void handleAddressSubmit(event); }}>
-        <label className="field">
-          <span>收货人</span>
-          <input aria-label="收货人" name="receiverName" minLength={2} maxLength={80} required />
-        </label>
-        <label className="field">
-          <span>收货手机号</span>
-          <input
-            aria-label="收货手机号"
-            name="receiverPhone"
-            inputMode="tel"
-            value={receiverPhone}
-            onChange={(event) => { setReceiverPhone(event.target.value); }}
-            required
-          />
-        </label>
-        <label className="field">
-          <span>省份</span>
-          <select
-            aria-label="省份"
-            name="province"
-            value={selectedProvince}
-            onChange={(event) => {
-              const nextProvince = event.target.value;
-              const nextCity = listCities(nextProvince)[0]?.name ?? "";
-              const nextDistrict = listDistricts(nextProvince, nextCity)[0]?.name ?? "";
-              setSelectedProvince(nextProvince);
-              setSelectedCity(nextCity);
-              setSelectedDistrict(nextDistrict);
-            }}
-            required
-          >
-            {provinceOptions.map((province) => <option key={province.code} value={province.name}>{province.name}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span>城市</span>
-          <select
-            aria-label="城市"
-            name="city"
-            value={selectedCity}
-            onChange={(event) => {
-              const nextCity = event.target.value;
-              setSelectedCity(nextCity);
-              setSelectedDistrict(listDistricts(selectedProvince, nextCity)[0]?.name ?? "");
-            }}
-            required
-          >
-            {cityOptions.map((city) => <option key={city.code} value={city.name}>{city.name}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span>区县</span>
-          <select
-            aria-label="区县"
-            name="district"
-            value={selectedDistrict}
-            onChange={(event) => { setSelectedDistrict(event.target.value); }}
-            required
-          >
-            {districtOptions.map((district) => <option key={district.code} value={district.name}>{district.name}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span>详细地址</span>
-          <input aria-label="详细地址" name="detail" required />
-        </label>
-        <Button type="submit" loading={loading} disabled={csrfToken.length === 0}>保存地址</Button>
-      </form>
-      <label className="field filter-control">
-        <span>结算地址</span>
-        <select aria-label="结算地址" value={selectedAddressId} onChange={(event) => { setSelectedAddressId(event.target.value); }}>
-          <option value="">请选择地址</option>
-          {addresses.map((address) => (
-            <option key={address.id} value={address.id}>
-              {address.receiverName} {address.maskedPhone} {address.city}{address.district}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="compact-list">
-        {cart.items.map((item) => (
-          <article className="compact-row compact-row--five" key={item.id}>
-            <strong>{item.productName}</strong>
-            <span>{item.shopName}</span>
-            <span>x {item.quantity}</span>
-            <span>¥{item.lineAmount}</span>
-            <StatusBadge status={item.available ? "AVAILABLE" : "UNAVAILABLE"} />
-          </article>
-        ))}
-      </div>
-      <div className="row-actions">
-        <strong>购物车合计 ¥{cart.totalAmount}</strong>
-        <Button loading={loading} disabled={csrfToken.length === 0 || cart.items.length === 0} onClick={() => { void submitCheckout(); }}>提交结算</Button>
-      </div>
-      <div className="compact-list">
-        {orders.map((order) => (
-          <article className="compact-row compact-row--five order-row" key={order.orderNo}>
-            <strong title={order.orderNo}>{displayOrderCode("主订单", order.orderNo)}</strong>
-            <span>¥{order.totalAmount}</span>
-            <span>{order.shopOrderCount} 个子订单</span>
-            <StatusBadge status={order.status} />
-            {order.status === "PENDING_PAYMENT" ? (
-              <Button variant="secondary" loading={loading} onClick={() => { void pay(order.orderNo); }}>去支付</Button>
-            ) : null}
-          </article>
-        ))}
-      </div>
-      <div className="compact-list">
-        {shopOrders.map((shopOrder) => (
-          <article className="compact-row compact-row--five order-row" key={shopOrder.shopOrderNo}>
-            <strong title={shopOrder.shopOrderNo}>{displayOrderCode("子订单", shopOrder.shopOrderNo)}</strong>
-            <span title={shopOrder.masterOrderNo}>{displayOrderCode("所属主订单", shopOrder.masterOrderNo)}</span>
-            <span>¥{shopOrder.subtotalAmount}</span>
-            <StatusBadge status={shopOrder.status} />
-            {shopOrder.status === "SHIPPED" ? (
-              <Button variant="secondary" loading={loading} onClick={() => { void confirm(shopOrder.shopOrderNo); }}>确认收货</Button>
-            ) : null}
-          </article>
-        ))}
-      </div>
+      {view !== "orders" ? (
+        <>
+          <form className="form-grid" onSubmit={(event) => { void handleAddressSubmit(event); }}>
+            <label className="field">
+              <span>收货人</span>
+              <input aria-label="收货人" name="receiverName" minLength={2} maxLength={80} required />
+            </label>
+            <label className="field">
+              <span>收货手机号</span>
+              <input
+                aria-label="收货手机号"
+                name="receiverPhone"
+                inputMode="tel"
+                value={receiverPhone}
+                onChange={(event) => { setReceiverPhone(event.target.value); }}
+                required
+              />
+            </label>
+            <label className="field">
+              <span>省份</span>
+              <select
+                aria-label="省份"
+                name="province"
+                value={selectedProvince}
+                onChange={(event) => {
+                  const nextProvince = event.target.value;
+                  const nextCity = listCities(nextProvince)[0]?.name ?? "";
+                  const nextDistrict = listDistricts(nextProvince, nextCity)[0]?.name ?? "";
+                  setSelectedProvince(nextProvince);
+                  setSelectedCity(nextCity);
+                  setSelectedDistrict(nextDistrict);
+                }}
+                required
+              >
+                {provinceOptions.map((province) => <option key={province.code} value={province.name}>{province.name}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>城市</span>
+              <select
+                aria-label="城市"
+                name="city"
+                value={selectedCity}
+                onChange={(event) => {
+                  const nextCity = event.target.value;
+                  setSelectedCity(nextCity);
+                  setSelectedDistrict(listDistricts(selectedProvince, nextCity)[0]?.name ?? "");
+                }}
+                required
+              >
+                {cityOptions.map((city) => <option key={city.code} value={city.name}>{city.name}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>区县</span>
+              <select
+                aria-label="区县"
+                name="district"
+                value={selectedDistrict}
+                onChange={(event) => { setSelectedDistrict(event.target.value); }}
+                required
+              >
+                {districtOptions.map((district) => <option key={district.code} value={district.name}>{district.name}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>详细地址</span>
+              <input aria-label="详细地址" name="detail" required />
+            </label>
+            <Button type="submit" loading={loading} disabled={csrfToken.length === 0}>保存地址</Button>
+          </form>
+          <label className="field filter-control">
+            <span>结算地址</span>
+            <select aria-label="结算地址" value={selectedAddressId} onChange={(event) => { setSelectedAddressId(event.target.value); }}>
+              <option value="" disabled>请选择地址</option>
+              {addresses.map((address) => (
+                <option key={address.id} value={address.id}>
+                  {address.receiverName} {address.maskedPhone} {address.city}{address.district}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="compact-list">
+            {cart.items.map((item) => (
+              <article className="compact-row compact-row--cart" key={item.id}>
+                <strong>{item.productName}</strong>
+                <span>{item.shopName}</span>
+                <span>单价 ¥{item.unitPrice}</span>
+                <label className="inline-field">
+                  <span>数量</span>
+                  <input
+                    aria-label={`商品数量：${item.productName}`}
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={quantityEdits[item.id] ?? String(item.quantity)}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      setQuantityEdits((current) => ({ ...current, [item.id]: nextValue }));
+                    }}
+                    onBlur={() => { void updateQuantity(item); }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void updateQuantity(item);
+                      }
+                    }}
+                  />
+                </label>
+                <span>小计 ¥{item.lineAmount}</span>
+                <StatusBadge status={item.available ? "AVAILABLE" : "UNAVAILABLE"} />
+                <button
+                  className="icon-button cart-delete-button"
+                  type="button"
+                  aria-label={`删除商品：${item.productName}`}
+                  title="删除商品"
+                  disabled={loading}
+                  onClick={() => { void removeItem(item.id, item.productName); }}
+                >
+                  ×
+                </button>
+              </article>
+            ))}
+          </div>
+          <div className="row-actions">
+            <strong>购物车合计 ¥{cart.totalAmount}</strong>
+            <Button loading={loading} disabled={csrfToken.length === 0 || cart.items.length === 0} onClick={requestCheckout}>提交结算</Button>
+          </div>
+          {checkoutDialogOpen ? (
+            <div className="dialog-backdrop">
+              <div className="checkout-dialog" role="dialog" aria-modal="true" aria-labelledby="checkout-dialog-title">
+                <h3 id="checkout-dialog-title">确认结算明细</h3>
+                <div className="checkout-lines">
+                  {cart.items.map((item) => (
+                    <div className="checkout-line" key={item.id}>
+                      <strong>{item.productName}</strong>
+                      <span>x {item.quantity}</span>
+                      <span>¥{item.unitPrice}</span>
+                      <span>¥{item.lineAmount}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="row-actions">
+                  <strong>总价 ¥{cart.totalAmount}</strong>
+                  <Button variant="secondary" onClick={() => { setCheckoutDialogOpen(false); }}>取消</Button>
+                  <Button loading={loading} onClick={() => { void submitCheckout(); }}>确认结算</Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+      {view !== "cart" ? (
+        <>
+          {view === "all" ? <h2>订单列表</h2> : null}
+          <div className="compact-list">
+            {orders.map((order) => (
+              <article className="compact-row compact-row--five order-row" key={order.orderNo}>
+                <strong title={order.orderNo}>{displayOrderCode("主订单", order.orderNo)}</strong>
+                <span>¥{order.totalAmount}</span>
+                <span>{order.shopOrderCount} 个子订单</span>
+                <StatusBadge status={order.status} />
+                {order.status === "PENDING_PAYMENT" ? (
+                  <Button variant="secondary" loading={loading} onClick={() => { void pay(order.orderNo); }}>去支付</Button>
+                ) : null}
+              </article>
+            ))}
+          </div>
+          <div className="compact-list">
+            {shopOrders.map((shopOrder) => (
+              <article className="compact-row compact-row--five order-row" key={shopOrder.shopOrderNo}>
+                <strong title={shopOrder.shopOrderNo}>{displayOrderCode("子订单", shopOrder.shopOrderNo)}</strong>
+                <span title={shopOrder.masterOrderNo}>{displayOrderCode("所属主订单", shopOrder.masterOrderNo)}</span>
+                <span>¥{shopOrder.subtotalAmount}</span>
+                <StatusBadge status={shopOrder.status} />
+                {shopOrder.status === "SHIPPED" ? (
+                  <Button variant="secondary" loading={loading} onClick={() => { void confirm(shopOrder.shopOrderNo); }}>确认收货</Button>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </>
+      ) : null}
       <StatusMessage>{message}</StatusMessage>
     </section>
   );
+}
+
+function cartQuantityState(cart: Cart): Record<string, string> {
+  return Object.fromEntries(cart.items.map((item) => [item.id, String(item.quantity)]));
 }
 
 const productPlaceholderSrc = "/product-placeholder.png";
@@ -935,15 +1095,35 @@ export function OwnerProductPanel() {
 
   useEffect(() => {
     let alive = true;
-    void Promise.all([fetchCsrf(), listPublicCategories(), listOwnerProducts()])
-      .then(([token, nextCategories, productResult]) => {
+    void fetchCsrf()
+      .then((token) => {
         if (alive) {
           setCsrfToken(token);
-          setCategories(nextCategories);
-          setProducts(productResult.data);
-          setMessage(productResult.meta.total === 0 ? "暂无商品。" : `共 ${productResult.meta.total} 件商品。`);
         }
       })
+      .catch((error) => {
+        if (alive) {
+          setMessage(errorMessage(error, "暂时无法读取安全令牌。"));
+        }
+      });
+    void listPublicCategories()
+      .then((nextCategories) => {
+        if (alive) {
+          setCategories(nextCategories);
+        }
+      })
+      .catch((error) => {
+        if (alive) {
+          setMessage(errorMessage(error, "暂时无法读取分类。"));
+        }
+      });
+    void (async () => {
+      const productResult = await listOwnerProducts();
+      if (alive) {
+        setProducts(productResult.data);
+        setMessage(productResult.meta.total === 0 ? "暂无商品。" : `共 ${productResult.meta.total} 件商品。`);
+      }
+    })()
       .catch((error) => {
         if (alive) {
           setMessage(errorMessage(error, "暂时无法读取商品。"));
@@ -987,8 +1167,12 @@ export function OwnerProductPanel() {
   async function publish(productId: string): Promise<void> {
     setLoading(true);
     try {
-      await publishOwnerProduct(productId, csrfToken);
-      await refresh();
+      const product = await publishOwnerProduct(productId, csrfToken);
+      setProducts((current) => current.map((item) => item.id === product.id ? product : item));
+      setMessage("商品已上架。");
+      await refresh().catch(() => {
+        setMessage("商品已上架，列表刷新失败。");
+      });
     } catch (error) {
       setMessage(errorMessage(error, "商品上架失败。"));
     } finally {
@@ -1001,7 +1185,7 @@ export function OwnerProductPanel() {
       <div className="section-heading">
         <h2 id="owner-products-title">商品管理</h2>
       </div>
-      <form className="form-grid" onSubmit={(event) => { void handleSubmit(event); }}>
+      <form className="form-grid owner-product-form" onSubmit={(event) => { void handleSubmit(event); }}>
         <label className="field">
           <span>商品分类</span>
           <select aria-label="商品分类" name="categoryId" disabled={categories.length === 0}>
@@ -1028,7 +1212,9 @@ export function OwnerProductPanel() {
           <span>商品图片</span>
           <input aria-label="商品图片" name="image" type="file" accept="image/png,image/jpeg,image/webp" />
         </label>
-        <Button type="submit" loading={loading} disabled={csrfToken.length === 0 || categories.length === 0}>创建草稿商品</Button>
+        <div className="owner-product-form__actions">
+          <Button type="submit" loading={loading} disabled={csrfToken.length === 0 || categories.length === 0}>创建草稿商品</Button>
+        </div>
       </form>
       <div className="compact-list">
         {products.map((product) => (
@@ -1150,26 +1336,9 @@ export function AdminDatabaseEvidencePanel() {
 
   return (
     <section className="stage-panel" aria-labelledby="admin-database-title">
-      <div className="section-heading">
-        <h2 id="admin-database-title">数据库证据总览</h2>
-      </div>
-      <div className="metric-strip" aria-label="数据库证据摘要">
-        <div>
-          <span>审计日志</span>
-          <strong>{auditLogs.length}</strong>
-        </div>
-        <div>
-          <span>销量排行</span>
-          <strong>{topProducts.length}</strong>
-        </div>
-        <div>
-          <span>开放能力</span>
-          <strong>只读</strong>
-        </div>
-      </div>
       <div className="evidence-grid">
-        <section aria-labelledby="audit-log-title">
-          <h3 id="audit-log-title">审计日志</h3>
+        <section aria-labelledby="admin-database-title">
+          <h2 id="admin-database-title">审计日志</h2>
           <div className="compact-list">
             {auditLogs.map((log) => (
               <article className="compact-row compact-row--five" key={log.id}>
@@ -1183,15 +1352,14 @@ export function AdminDatabaseEvidencePanel() {
           </div>
         </section>
         <section aria-labelledby="top-product-title">
-          <h3 id="top-product-title">有效销量 Top 10</h3>
+          <h2 id="top-product-title">有效销量 Top 10</h2>
           <div className="compact-list">
             {topProducts.map((product) => (
-              <article className="compact-row compact-row--five" key={product.productId}>
+              <article className="compact-row" key={product.productId}>
                 <strong>{product.productName}</strong>
                 <span>第 {product.salesRank} 名</span>
                 <span>{product.soldQuantity} 件</span>
                 <span>¥{product.salesAmount}</span>
-                <span>窗口函数</span>
               </article>
             ))}
           </div>
